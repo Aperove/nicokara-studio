@@ -36,13 +36,13 @@ describe("getJob", () => {
     } catch (reason) {
       expect(reason).toBeInstanceOf(ApiRequestError);
       expect((reason as InstanceType<typeof ApiRequestError>).feedback).toMatchObject({
-        title: "任务不存在或已过期",
+        title: "本地任务不存在或已清理",
         retryable: false,
       });
     }
   });
 
-  it("returns gateway recovery steps for a deployed server outage", async () => {
+  it("returns local recovery steps when the frontend cannot reach the backend", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
@@ -60,12 +60,12 @@ describe("getJob", () => {
     } catch (reason) {
       expect(reason).toBeInstanceOf(ApiRequestError);
       const feedback = (reason as InstanceType<typeof ApiRequestError>).feedback;
-      expect(feedback.title).toBe("服务器网关暂时不可用");
-      expect(feedback.solutions.join(" ")).toContain("Nginx");
+      expect(feedback.title).toBe("本地前后端连接异常");
+      expect(feedback.solutions.join(" ")).toContain("Docker Compose");
     }
   });
 
-  it("returns recoverable server guidance when the request cannot connect", async () => {
+  it("returns recoverable local guidance when the request cannot connect", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("fetch failed")));
     const { ApiRequestError, getJob } = await import("./api");
 
@@ -75,7 +75,7 @@ describe("getJob", () => {
     } catch (reason) {
       expect(reason).toBeInstanceOf(ApiRequestError);
       expect((reason as InstanceType<typeof ApiRequestError>).feedback).toMatchObject({
-        title: "无法连接服务器",
+        title: "无法连接本地处理服务",
         retryable: true,
       });
     }

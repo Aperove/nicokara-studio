@@ -2,20 +2,20 @@ import { describe, expect, it } from "vitest";
 
 import { HOME_COPY, JOB_COPY, UPLOAD_COPY } from "./ui-copy";
 
-describe("server-facing interface copy", () => {
-  it("describes server processing without local performance promises", () => {
+describe("Studio local interface copy", () => {
+  it("describes local processing without cloud deployment wording", () => {
     const copy = JSON.stringify({ HOME_COPY, JOB_COPY, UPLOAD_COPY });
 
     expect(copy).not.toContain("电脑性能");
     expect(copy).not.toContain("最快约");
-    expect(copy).not.toContain("请勿在处理中关闭服务");
-    expect(HOME_COPY.introduction).toContain("服务器");
-    expect(UPLOAD_COPY.footer).toContain("关闭页面不会中断任务");
+    expect(copy).not.toContain("服务器");
+    expect(HOME_COPY.introduction).toContain("本机");
+    expect(UPLOAD_COPY.footer).toContain("本地处理服务");
   });
 
-  it("labels transfer progress as uploading rather than video production", () => {
-    expect(UPLOAD_COPY.uploadProgressTitle).toBe("正在上传素材到服务器");
-    expect(UPLOAD_COPY.uploadingButton).toBe("正在上传…");
+  it("labels transfer progress as importing into the local workspace", () => {
+    expect(UPLOAD_COPY.uploadProgressTitle).toBe("正在导入素材到本机");
+    expect(UPLOAD_COPY.uploadingButton).toBe("正在导入…");
     expect(UPLOAD_COPY.uploadProgressDescription).toContain("任务状态页");
   });
 
@@ -30,7 +30,7 @@ describe("server-facing interface copy", () => {
   });
 
   it("uses clear task and result labels", () => {
-    expect(JOB_COPY.loading).toBe("正在连接服务器并读取任务状态…");
+    expect(JOB_COPY.loading).toBe("正在读取本地任务状态…");
     expect(JOB_COPY.currentProgress).toBe("当前进度");
     expect(JOB_COPY.resultHeading).toBe("生成结果");
     expect(JOB_COPY.downloadVideo).toBe("下载生成的视频");

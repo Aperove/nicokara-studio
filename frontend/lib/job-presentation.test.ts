@@ -133,13 +133,13 @@ describe("jobPresentation", () => {
     });
   });
 
-  it("describes failures for a deployed server instead of a local setup", async () => {
+  it("describes failures as local processing problems", async () => {
     const { jobPresentation } = await import("./job-presentation");
 
     const presentation = jobPresentation("FAILED", "TRANSCRIBING");
 
-    expect(presentation.description).toContain("服务器");
-    expect(presentation.description).not.toContain("本地依赖");
+    expect(presentation.description).toContain("本机");
+    expect(presentation.description).not.toContain("服务器");
   });
 
   it("explains active stages without exposing internal stage codes", async () => {
@@ -147,7 +147,7 @@ describe("jobPresentation", () => {
 
     const presentation = jobPresentation("PROCESSING", "RENDERING_VIDEO");
 
-    expect(presentation.description).toContain("服务器");
+    expect(presentation.description).toContain("本机");
     expect(presentation.description).toContain("耗时较长");
     expect(presentation.description).not.toContain("FFmpeg");
     expect(presentation.progressLabel).not.toContain("RENDERING_VIDEO");
@@ -159,5 +159,25 @@ describe("jobPresentation", () => {
     const presentation = jobPresentation("PROCESSING", "REMOVING_VOCALS");
 
     expect(presentation.description).toContain("OFF VOCAL");
+  });
+
+  it("keeps every active stage in the Studio local context", async () => {
+    const { jobPresentation } = await import("./job-presentation");
+    const stages = [
+      "UPLOAD_COMPLETE",
+      "EXTRACTING_AUDIO",
+      "REMOVING_VOCALS",
+      "TRANSCRIBING",
+      "PROCESSING_LYRICS",
+      "ALIGNING",
+      "GENERATING_SUBTITLE",
+      "RENDERING_VIDEO",
+    ];
+    const copy = JSON.stringify(
+      stages.map((stage) => jobPresentation("PROCESSING", stage)),
+    );
+
+    expect(copy).not.toContain("服务器");
+    expect(copy).toContain("本机");
   });
 });

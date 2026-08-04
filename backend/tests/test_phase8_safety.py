@@ -310,6 +310,48 @@ def test_upload_rate_limiter_blocks_repeated_requests() -> None:
     assert limiter.allow("127.0.0.1", now=161)
 
 
+def test_upload_rate_limiter_can_be_disabled_for_studio() -> None:
+    from app.core.rate_limit import UploadRateLimiter
+
+    limiter = UploadRateLimiter(
+        max_requests=0,
+        window_seconds=60,
+    )
+
+    assert all(
+        limiter.allow("127.0.0.1", now=timestamp)
+        for timestamp in range(100, 120)
+    )
+
+
+def test_studio_api_allows_unlimited_local_task_creation(tmp_path: Path) -> None:
+    settings = Settings(
+        data_dir=tmp_path / "data",
+        storage_dir=tmp_path / "jobs",
+        processing_enabled=False,
+        max_uploads_per_hour=0,
+    )
+    upload = {
+        "video": (
+            "song.mp4",
+            b"\x00\x00\x00\x18ftypisomvideo",
+            "video/mp4",
+        )
+    }
+
+    with TestClient(create_app(settings)) as client:
+        responses = [
+            client.post(
+                "/api/v1/jobs",
+                files=upload,
+                data={"lyrics_text": "歌詞"},
+            )
+            for _ in range(10)
+        ]
+
+    assert {response.status_code for response in responses} == {201}
+
+
 def test_api_rate_limits_upload_creation(tmp_path: Path) -> None:
     settings = Settings(
         data_dir=tmp_path / "data",

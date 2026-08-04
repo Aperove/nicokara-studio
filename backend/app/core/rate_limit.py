@@ -18,6 +18,8 @@ class UploadRateLimiter:
         self._lock = Lock()
 
     def allow(self, key: str, *, now: float | None = None) -> bool:
+        if self.max_requests == 0:
+            return True
         timestamp = time.monotonic() if now is None else now
         cutoff = timestamp - self.window_seconds
         with self._lock:

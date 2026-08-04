@@ -1,14 +1,14 @@
 export const HOME_COPY = {
   introduction:
-    "上传原版 MV 和日语歌词，服务器将自动完成歌声识别、歌词同步、假名注音与视频合成。",
+    "导入原版 MV 和日语歌词，本机将自动完成歌声识别、歌词同步、假名注音与视频合成。",
   steps: [
     {
       title: "提交素材",
       text: "选择 MP4 视频，并粘贴歌词或上传 UTF-8 TXT 文件。",
     },
     {
-      title: "服务器处理",
-      text: "任务进入队列后，服务器会依次完成音频分析、歌词同步和字幕生成。",
+      title: "本地处理",
+      text: "任务创建后，本机会依次完成音频分析、歌词同步和字幕生成。",
     },
     {
       title: "获取结果",
@@ -16,6 +16,12 @@ export const HOME_COPY = {
     },
   ],
   callToAction: "开始创建",
+  author: {
+    qq: "280475274",
+    bilibili: "esrgt",
+    xiaohongshu: "esr",
+    message: "项目已开源，欢迎关注项目更新进度，与错误反馈或修改建议",
+  },
   metadataDescription:
     "上传 MV 和日语歌词，自动生成带逐字高亮和假名注音的ニコカラ视频。",
 } as const;
@@ -30,18 +36,18 @@ export const UPLOAD_COPY = {
   vocalOnLabel: "ON VOCAL",
   vocalOffLabel: "OFF VOCAL",
   offVocalHint:
-    "服务器将使用 MDX 模型分离人声并生成伴奏音轨，处理时间会相应增加。",
-  uploadProgressTitle: "正在上传素材到服务器",
-  uploadProgressDescription: "上传完成后会自动进入任务状态页。",
-  uploadingButton: "正在上传…",
+    "本机将使用 MDX 模型分离人声并生成伴奏音轨，处理时间会相应增加。",
+  uploadProgressTitle: "正在导入素材到本机",
+  uploadProgressDescription: "导入完成后会自动进入任务状态页。",
+  uploadingButton: "正在导入…",
   submitButton: "提交生成任务",
   footer:
-    "上传完成后，任务会在服务器继续处理。关闭页面不会中断任务，请保存任务链接或任务 ID。",
+    "导入完成后，任务会由本地处理服务继续执行。关闭页面不会中断任务，但请保持本地服务运行。",
 } as const;
 
 export const JOB_COPY = {
   backToUpload: "返回上传页",
-  loading: "正在连接服务器并读取任务状态…",
+  loading: "正在读取本地任务状态…",
   currentProgress: "当前进度",
   submittedVideo: "提交的视频",
   taskId: "任务 ID",

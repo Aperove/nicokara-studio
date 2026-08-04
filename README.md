@@ -18,9 +18,18 @@
 
 ## 当前版本状态
 
-Studio 仓库目前以已经完成 Phase 1-8 的服务器运行版本为开发基线，现有代码具备完整的视频生成闭环、Docker 本地运行能力和 Linux 服务器部署能力。专业时间轴编辑、字幕预览和样式编辑等 Studio 功能仍属于后续开发内容。
+Studio 仓库以已经完成 Phase 1-8 的处理闭环为开发基线，主要面向个人电脑和本地工作站运行。当前界面、进度说明和错误恢复建议已经切换为本地使用语境，会直接指导用户检查 Docker Compose、本地后端、FFmpeg、模型目录、内存和磁盘空间。专业时间轴编辑、字幕预览和样式编辑等 Studio 功能仍属于后续开发内容。
 
-> GitHub 仓库中的代码不会自动同步到正在运行的服务器。修改代码后仍需重新构建、打包、上传并切换服务器版本，具体步骤见 [本地构建与无 Docker 部署指南](./DEPLOYMENT_LOCAL_BUILD.md)。
+> Studio 与 Cloud 使用独立仓库维护。Studio 的本地文案和专业制作功能不应直接合并到公开服务仓库；可复用的底层处理修复应经过测试后分别同步。
+
+## 与 Cloud 版本的区别
+
+| 项目 | Studio | Cloud |
+|---|---|---|
+| 主要场景 | 个人电脑或本地工作站制作 | 通过浏览器访问公开服务器 |
+| 错误排查 | 本地后端、Docker、FFmpeg、模型、内存和磁盘 | Nginx、systemd、限流、队列和服务器日志 |
+| 产品重点 | 时间轴校准、字幕预览和样式精调 | 简化操作、排队、公平限流和多人稳定性 |
+| 数据位置 | 默认保存在用户本机 | 保存在服务器共享数据目录 |
 
 ## 当前能力
 
@@ -32,7 +41,7 @@ Studio 仓库目前以已经完成 Phase 1-8 的服务器运行版本为开发�
 | 歌词处理 | 已完成 | DeepSeek 可选处理、pykakasi 本地降级、Ruby 注音和 Mora 拆分 |
 | 时间轴与字幕 | 已完成 | 歌词对齐、漏词插值、ASS v4+、逐字高亮和 Ruby 注音 |
 | 视频合成 | 已完成 | FFmpeg/libass 烧录、H.264 MP4、在线播放和下载 |
-| 前端反馈 | 已完成 | 中文进度、服务器错误分类、详细原因、解决方案和技术信息 |
+| 前端反馈 | 已完成 | 本地处理进度、本地错误分类、可执行的环境检查和诊断信息 |
 | 运行保护 | 已完成 | 单任务队列、限流、重启恢复、自动清理和路径安全校验 |
 | 部署 | 已完成 | Docker Compose；Linux 下的 Nginx + systemd + `/data/nicokara` 发布结构 |
 
@@ -120,9 +129,9 @@ docker compose up --build
 
 启动后访问：
 
-- 前端：http://localhost:3000
-- API 文档：http://localhost:8000/docs
-- 健康检查：http://localhost:8000/health
+- 前端：http://localhost:3200
+- API 文档：http://localhost:8100/docs
+- 健康检查：http://localhost:8100/health
 
 停止服务：
 
@@ -138,16 +147,16 @@ docker compose down
 cd backend
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e ".[ai,dev]"
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8100
 ```
 
 另开终端启动前端。Node.js 要求 `>=22.13.0`，推荐 Node.js 24：
 
 ```powershell
 cd frontend
-$env:NEXT_PUBLIC_API_URL = "http://localhost:8000/api/v1"
+$env:NEXT_PUBLIC_API_URL = "http://localhost:8100/api/v1"
 npm.cmd install
-npm.cmd run dev -- --host 127.0.0.1 --port 3000
+npm.cmd run dev -- --host 127.0.0.1 --port 3200
 ```
 
 本地直接运行时还需安装 FFmpeg，并保证 `ffmpeg` 可从 `PATH` 调用。首次转录会下载 faster-whisper 模型。
@@ -188,17 +197,22 @@ npm.cmd run dev -- --host 127.0.0.1 --port 3000
 | `NICOKARA_STORAGE_DIR` | `../storage/jobs` | 任务文件目录 |
 | `NICOKARA_MAX_VIDEO_BYTES` | `1073741824` | MP4 最大字节数 |
 | `NICOKARA_MAX_PENDING_JOBS` | `4` | 最大等待任务数 |
-| `NICOKARA_MAX_UPLOADS_PER_HOUR` | `6` | 单来源每小时上传任务数 |
+| `NICOKARA_MAX_UPLOADS_PER_HOUR` | `0` | 单来源每小时上传任务数；`0` 表示 Studio 不限流 |
 | `NICOKARA_JOB_RETENTION_HOURS` | `24` | 已结束任务保留时间 |
-| `NICOKARA_ALLOWED_ORIGINS` | `http://localhost:3000` | 允许的前端来源 |
+| `NICOKARA_ALLOWED_ORIGINS` | `http://localhost:3200` | 允许的前端来源 |
 | `NICOKARA_WHISPER_MODEL` | `small` | Whisper 模型名称或本地路径 |
 | `NICOKARA_WHISPER_DEVICE` | `cpu` | `cpu` 或 `cuda` |
 | `NICOKARA_VOCAL_REMOVAL_BACKEND` | `mdx` | 人声分离后端 |
 | `NICOKARA_DEEPSEEK_API_KEY` | 空 | DeepSeek Key；为空时使用本地歌词处理 |
 
+Studio 默认将 `NICOKARA_MAX_UPLOADS_PER_HOUR` 设为 `0`，因此个人本地使用不会因连续提交而等待。只有在共享工作站上需要限制提交频率时，才应将它改为大于 `0` 的每小时次数并重启后端。
+
 密钥只应保存在本地 `.env` 或服务器 `/data/nicokara/shared/nicokara.env` 中，不要提交到 Git 仓库。
 
 ## 测试
+
+当前前端测试基线为 7 个测试文件、30 项测试，覆盖 Studio 本地错误反馈、任务阶段、
+API 错误转换、本地开发代理、主要界面文案和错误面板渲染。
 
 ```powershell
 cd backend
@@ -215,8 +229,8 @@ npm.cmd run build
 - 当前还没有内置可视化时间轴、Ruby 注音修正和字幕样式编辑器。
 - 当前前端要求用户提供歌词，无歌词模式尚未接入前端流程。
 - 队列和限流目前是单进程实现；多后端实例需要引入 Redis/Celery 等共享服务。
-- 当前没有用户账号和任务权限隔离，公开部署前应限制访问范围并启用 HTTPS。
-- 原始 FFmpeg、模型路径及外部 API 错误只应写入服务器日志，不直接返回给用户。
+- Studio 当前没有用户账号和任务权限隔离，不应直接作为公开上传服务使用。
+- 原始 FFmpeg、模型路径及外部 API 错误只写入本地后端日志，不直接显示在页面正文中。
 
 ## 进一步文档
 

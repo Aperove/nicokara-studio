@@ -60,9 +60,20 @@ export default defineConfig(async () => {
   };
 
   return {
-    server: isCodexSeatbeltSandbox
-      ? { watch: { useFsEvents: false, usePolling: true } }
-      : undefined,
+    server: {
+      proxy: {
+        "/api": {
+          target: new URL(
+            process.env.NICOKARA_DEV_API_ORIGIN ||
+              "http://127.0.0.1:8100",
+          ).origin,
+          changeOrigin: true,
+        },
+      },
+      watch: isCodexSeatbeltSandbox
+        ? { useFsEvents: false, usePolling: true }
+        : undefined,
+    },
     plugins: [
       vinext(),
       sites(),

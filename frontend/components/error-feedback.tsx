@@ -31,7 +31,7 @@ export function ErrorFeedbackPanel({
           </p>
 
           <div className="mt-4">
-            <p className="text-sm font-semibold">建议处理</p>
+            <p className="text-sm font-semibold">本地处理建议</p>
             <ol className="mt-2 list-decimal space-y-1.5 pl-5 text-sm leading-6 text-muted-foreground">
               {feedback.solutions.map((solution) => (
                 <li key={solution}>{solution}</li>
@@ -42,7 +42,7 @@ export function ErrorFeedbackPanel({
           {feedback.technicalDetails.length > 0 && (
             <details className="mt-4 border-t border-destructive/15 pt-3">
               <summary className="focus-ring w-fit cursor-pointer rounded-sm text-xs font-medium text-muted-foreground">
-                技术信息
+                诊断信息
               </summary>
               <ul className="mt-2 space-y-1 font-mono text-xs leading-5 text-muted-foreground">
                 {feedback.technicalDetails.map((detail) => (

@@ -80,7 +80,7 @@ export function jobPresentation(
             : stage === "PROCESSING_LYRICS"
               ? "歌词处理失败"
               : "歌声识别失败",
-      description: "服务器未能完成当前处理阶段，请按下方建议检查素材或服务状态。",
+      description: "本机未能完成当前处理阶段，请按下方建议检查素材或本地服务状态。",
       progressLabel: "任务失败",
       terminal: true,
       tone: "error",
@@ -90,7 +90,7 @@ export function jobPresentation(
     return {
       eyebrow: "人声处理",
       title: "正在生成伴奏音轨",
-      description: "服务器正在分离人声并生成伴奏音轨。选择 OFF VOCAL 模式时会执行此步骤。",
+      description: "本机正在分离人声并生成伴奏音轨。选择 OFF VOCAL 模式时会执行此步骤。",
       progressLabel: "分离人声",
       terminal: false,
       tone: "active",
@@ -100,7 +100,7 @@ export function jobPresentation(
     return {
       eyebrow: "音频准备",
       title: "正在准备视频音轨",
-      description: "服务器正在读取视频中的音轨，为后续歌声识别做准备。",
+      description: "本机正在读取视频中的音轨，为后续歌声识别做准备。",
       progressLabel: "提取音频",
       terminal: false,
       tone: "active",
@@ -110,7 +110,7 @@ export function jobPresentation(
     return {
       eyebrow: "歌声识别",
       title: "正在识别歌声",
-      description: "服务器正在识别日语歌声，并记录每句歌词对应的时间。",
+      description: "本机正在识别日语歌声，并记录每句歌词对应的时间。",
       progressLabel: "识别歌声",
       terminal: false,
       tone: "active",
@@ -120,7 +120,7 @@ export function jobPresentation(
     return {
       eyebrow: "歌词处理",
       title: "正在整理歌词与注音",
-      description: "服务器正在整理歌词分行、假名读音和汉字注音。",
+      description: "本机正在整理歌词分行、假名读音和汉字注音。",
       progressLabel: "处理歌词",
       terminal: false,
       tone: "active",
@@ -130,7 +130,7 @@ export function jobPresentation(
     return {
       eyebrow: "时间轴同步",
       title: "正在匹配歌词时间",
-      description: "服务器正在把歌词与演唱时间匹配，确保逐字高亮同步。",
+      description: "本机正在把歌词与演唱时间匹配，确保逐字高亮同步。",
       progressLabel: "对齐时间",
       terminal: false,
       tone: "active",
@@ -140,7 +140,7 @@ export function jobPresentation(
     return {
       eyebrow: "字幕生成",
       title: "正在生成逐字高亮字幕",
-      description: "服务器正在生成逐字高亮和假名注音字幕。",
+      description: "本机正在生成逐字高亮和假名注音字幕。",
       progressLabel: "生成字幕",
       terminal: false,
       tone: "active",
@@ -150,7 +150,7 @@ export function jobPresentation(
     return {
       eyebrow: "视频合成",
       title: "正在合成最终视频",
-      description: "服务器正在将字幕与视频合成。此阶段通常耗时较长，请耐心等待。",
+      description: "本机正在将字幕与视频合成。此阶段通常耗时较长，请耐心等待。",
       progressLabel: "合成视频",
       terminal: false,
       tone: "active",
@@ -159,7 +159,7 @@ export function jobPresentation(
   return {
     eyebrow: "等待处理",
     title: "任务正在排队",
-    description: "素材已保存，服务器会按顺序自动开始处理。可以保留页面，也可以稍后通过任务链接返回。",
+    description: "素材已保存到本机，任务会按顺序自动开始处理。可以保留页面，也可以稍后通过任务链接返回。",
     progressLabel: "等待处理",
     terminal: false,
     tone: "pending",

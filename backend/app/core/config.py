@@ -21,11 +21,11 @@ class Settings(BaseSettings):
     max_video_bytes: int = 1024 * 1024 * 1024
     max_lyrics_bytes: int = 1024 * 1024
     max_pending_jobs: int = 4
-    max_uploads_per_hour: int = 6
+    max_uploads_per_hour: int = 0
     cleanup_enabled: bool = True
     job_retention_hours: int = 24
     cleanup_interval_seconds: int = 3600
-    allowed_origins: str = "http://localhost:3000"
+    allowed_origins: str = "http://localhost:3200"
     processing_enabled: bool = True
     ffmpeg_path: str = "ffmpeg"
     ffmpeg_timeout_seconds: int = 900
@@ -56,7 +56,6 @@ class Settings(BaseSettings):
         "max_video_bytes",
         "max_lyrics_bytes",
         "max_pending_jobs",
-        "max_uploads_per_hour",
         "job_retention_hours",
         "cleanup_interval_seconds",
         "video_render_timeout_seconds",
@@ -65,6 +64,13 @@ class Settings(BaseSettings):
     def positive_limits(cls, value: int) -> int:
         if value <= 0:
             raise ValueError("must be greater than zero")
+        return value
+
+    @field_validator("max_uploads_per_hour")
+    @classmethod
+    def non_negative_upload_limit(cls, value: int) -> int:
+        if value < 0:
+            raise ValueError("must be zero or greater")
         return value
 
     @field_validator("video_render_crf")
