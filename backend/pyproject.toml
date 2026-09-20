@@ -6,6 +6,8 @@ requires-python = ">=3.11"
 dependencies = [
   "fastapi>=0.116,<1",
   "httpx>=0.28,<1",
+  # measuring text with the installed font, to place ruby above its word
+  "pillow>=10",
   "pydantic-settings>=2.10,<3",
   "pykakasi>=2.3,<3",
   "python-multipart>=0.0.20,<1",

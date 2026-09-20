@@ -28,7 +28,7 @@ from app.lyrics.processor import (
 from app.tasks.pipeline import TranscriptionPipeline
 from app.tasks.runner import LocalTaskRunner
 from app.tasks.cleanup import JobCleanupService, PeriodicCleanupRunner
-from app.subtitle.ass_generator import AssGenerator
+from app.subtitle.ass_generator import AssConfig, AssGenerator
 from app.video.audio import FFmpegAudioExtractor
 from app.video.download import YtDlpVideoDownloader
 from app.video.rendering import FFmpegVideoRenderer
@@ -158,7 +158,9 @@ def create_app(
                     ),
                     lyric_processor=lyric_processor,
                     aligner=LyricTimelineAligner(),
-                    subtitle_generator=AssGenerator(),
+                    subtitle_generator=AssGenerator(
+                        config=AssConfig(measure_fonts=True)
+                    ),
                     video_renderer=FFmpegVideoRenderer(
                         command=(resolved_settings.ffmpeg_path,),
                         timeout_seconds=(

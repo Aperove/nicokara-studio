@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import re
+from typing import Callable
 import unicodedata
 
 from app.alignment.models import AlignedLine
@@ -88,28 +89,38 @@ def ruby_placements(
     ruby_font_size: int = 48,
     char_width_ratio: float = 0.68,
     center_x: int | None = None,
+    measure: Callable[[str], float] | None = None,
 ) -> list[RubyPlacement]:
-    char_width = round(base_font_size * char_width_ratio)
-    line_width = text_width_units(line.surface) * char_width
-    line_left = (center_x or play_res_x / 2) - line_width / 2
+    """Where each reading goes, centred above its kanji.
+
+    `measure` gives the rendered width of a piece of the line at the base
+    font size.  Without it widths are estimated from the font size, which is
+    only right for fonts whose glyphs are about 0.68 of it wide.
+    """
+    if measure is None:
+        char_width = round(base_font_size * char_width_ratio)
+
+        def measure(text: str) -> float:
+            return text_width_units(text) * char_width
+
+    line_left = (center_x or play_res_x / 2) - measure(line.surface) / 2
     placements: list[RubyPlacement] = []
-    offset_units = 0.0
+    consumed = ""
     for token in line.tokens:
         for run_start, run_end, reading in kanji_readings(
             token.surface,
             token.reading,
         ):
-            run_centre_units = (
-                offset_units
-                + text_width_units(token.surface[:run_start])
-                + text_width_units(token.surface[run_start:run_end]) / 2
-            )
+            # Measured from the start of the line rather than added up word
+            # by word, so rounding and kerning do not accumulate.
+            before = measure(consumed + token.surface[:run_start])
+            run = measure(token.surface[run_start:run_end])
             placements.append(
                 RubyPlacement(
                     text=reading,
-                    x=round(line_left + run_centre_units * char_width),
+                    x=round(line_left + before + run / 2),
                     y=baseline_y - base_font_size // 2 - 2,
                 )
             )
-        offset_units += text_width_units(token.surface)
+        consumed += token.surface
     return placements

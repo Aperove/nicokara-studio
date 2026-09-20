@@ -35,6 +35,9 @@ class AssConfig:
     glow_color: str = "&H400000FF"
     show_ruby: bool = True
     glow: bool = True
+    # Lay text out with the metrics of the installed font instead of an
+    # estimate, and replace a font that is not installed by one that is.
+    measure_fonts: bool = False
 
 
 @dataclass(frozen=True)
@@ -54,7 +57,20 @@ def ass_time(milliseconds: int) -> str:
 class AssGenerator:
     def __init__(self, *, config: AssConfig | None = None) -> None:
         self.config = config or AssConfig()
+        self._measure = None
+        if self.config.measure_fonts:
+            from app.subtitle.font_metrics import installed_font_name, measure_for
+
+            self.config = replace(
+                self.config, font_name=installed_font_name(self.config.font_name)
+            )
+            self._measure = measure_for(self.config.font_name)
         self.slots = self._slots(self.config)
+
+    def _line_width(self, text: str, font_size: float) -> float:
+        if self._measure is not None:
+            return self._measure(text, font_size)
+        return text_width_units(text) * font_size * _CHAR_WIDTH_RATIO
 
     @staticmethod
     def _slots(config: AssConfig) -> tuple[FixedSlot, FixedSlot]:
@@ -81,8 +97,9 @@ class AssGenerator:
                 * min(slot.x, self.config.play_res_x - slot.x)
                 * self.config.max_line_width_ratio
             )
-            units = max(1.0, text_width_units(line.surface))
-            base = min(base, int(available_px / (units * _CHAR_WIDTH_RATIO)))
+            # width grows in proportion to the font size
+            width_per_size = max(0.01, self._line_width(line.surface, 100) / 100)
+            base = min(base, int(available_px / width_per_size))
         base = max(40, base)
         ruby = max(20, round(base * 0.40))
         return base, ruby
@@ -229,6 +246,11 @@ class AssGenerator:
                 base_font_size=self.config.base_font_size,
                 ruby_font_size=self.config.ruby_font_size,
                 center_x=slot.x,
+                measure=(
+                    (lambda text: self._measure(text, self.config.base_font_size))
+                    if self._measure is not None
+                    else None
+                ),
             )
         ]
 
