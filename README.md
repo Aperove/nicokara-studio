@@ -30,7 +30,7 @@
 |---|---|
 | **素材** | 上传本地 MP4，或者直接填 YouTube 链接由本机下载；歌词粘贴、上传 TXT，或者直接粘贴 LRC |
 | **读音与注音** | 自动生成每个词的假名读音，汉字上方显示 Ruby 注音；读音可以在核对时逐词修改 |
-| **对齐** | 把已知歌词对齐到整首歌，精确到音节；自动把被对到间奏里的句子挪回有人唱的位置 |
+| **对齐** | 把已知歌词对齐到整首歌，精确到音节；自动把被对到间奏里的句子挪回有人唱的位置（句内的短暂停顿不算） |
 | **核对** | 原视频 + 实时变色预览、仅人声试听、逐句播放、波形上拖动句子、打点、AI 重新对齐单句 |
 | **样式** | 8 套配色、11 种字体、字号、排布、位置、注音和发光开关，带实时预览；完成后可以只换样式重新生成 |
 | **成片** | H.264 MP4，`ON VOCAL`（原唱）和 `OFF VOCAL`（伴奏）两个版本；字幕只烧录一次，伴奏版只替换音轨 |
@@ -129,7 +129,8 @@ NICOKARA_FORCED_ALIGNER_PYTHON=C:/path/to/nicokara-studio/work/qwen-venv/Scripts
 ### 需要知道的
 
 - **许可**：karatimer 使用的对齐模型 `NextFire/mms-300m-ForcedAligner-karaoke-ja-Latn` 以 **CC-BY-NC-SA-4.0** 授权，只能用于非商业用途。
-- **任何一步失败都不会让任务失败**：karatimer 出错，或它的结果只对上不足 60% 的歌词时，自动退回 Whisper（+ Qwen3）；Roformer 出错时只是不做间奏检测。
+- **任何一步失败都不会让任务失败**：karatimer 出错时自动退回 Whisper（+ Qwen3）；Roformer 出错时只是不做间奏检测。
+- **但退回不是悄悄发生的**：Whisper 的精度明显不如 karatimer，所以这样的任务在核对界面顶部会有提示并写明原因，旁边的“重试整首对齐”可以再跑一次 karatimer，成功后替换当前时间轴。
 - karatimer 直接对原视频的完整混音做对齐。Roformer 人声轨只用于间奏检测和试听：实测中把识别和对齐也换到它上面反而更差。
 - 间奏检测的阈值相对每首歌自身的响度设定；人声轨不够干净时会放弃检测，不会硬猜。
 - Qwen3 不能一次处理整首歌（后半首会严重漂移），所以按 Whisper 的粗定位切成约 30 秒的片段分别对齐，切点只选在 Whisper 时间可靠的位置。实测一首歌对齐本身约 1 秒、模型加载约 20 秒、显存峰值约 2.2 GB；Roformer 分离约 17 秒。
@@ -204,6 +205,7 @@ storage/jobs/{job_id}/
 |-- transcript.source           # transcript.json 的来源标记（karatimer 时存在）
 |-- transcript.asr.json         # 旧任务升级到 karatimer 时保留的 Whisper 结果
 |-- forced_alignment.json       # Qwen3 强制对齐的词级时间（启用时）
+|-- forced_alignment_failure.json  # 整首强制对齐失败、退回 Whisper 的原因（发生时）
 |-- alignment_notes.json        # 检测到的间奏、被自动挪动或按 LRC 调整的句子
 |-- timeline.json               # 最终逐字时间轴，可在核对界面修改
 |-- lyrics.ass
@@ -260,6 +262,7 @@ storage/jobs/{job_id}/
 | `GET /{id}/source`、`/audio/{mix\|vocals}` | 原视频与音轨，供核对时播放 |
 | `PUT /{id}/timeline` | 批量保存逐句的起止时间（只校验最终结果：各句起点必须依次递增） |
 | `PUT /{id}/readings` | 修改词的假名读音，同时更新歌词数据和时间轴 |
+| `POST /{id}/timeline/forced` | 对退回到语音识别的任务重新做整首强制对齐，成功后替换时间轴 |
 | `POST /{id}/timeline/refine` | 在当前起止范围内用强制对齐重新对齐指定的句子 |
 | `POST /{id}/render` | 按当前时间轴合成视频 |
 
@@ -314,7 +317,7 @@ npm.cmd test
 npm.cmd run build
 ```
 
-当前基线：后端 205 项测试；前端 8 个测试文件、43 项测试。类型检查中 `frontend/worker/index.ts` 有两个缺少 Cloudflare 类型定义的既有报错，与功能无关。
+当前基线：后端 206 项测试；前端 8 个测试文件、43 项测试。类型检查中 `frontend/worker/index.ts` 有两个缺少 Cloudflare 类型定义的既有报错，与功能无关。
 
 ## 与原项目的差异
 

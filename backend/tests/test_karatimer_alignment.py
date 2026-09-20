@@ -281,6 +281,36 @@ def test_recognition_is_the_fallback_when_forced_alignment_goes_wrong(
     assert not (job_dir / "transcript.source").exists()
     timeline = json.loads((job_dir / "timeline.json").read_text("utf-8"))
     assert timeline["lines"][0]["start_ms"] == 30_000
+    # the loss of accuracy is recorded for the review screen
+    reason = pipeline_failure(job_dir)
+    assert reason == ("no gpu" if mode == "fail" else reason) and reason
+
+
+def pipeline_failure(job_dir: Path) -> str | None:
+    return TranscriptionPipeline(
+        database=None, extractor=None, transcriber=None,
+        primary_aligner=ForcedAligner(),
+    ).forced_alignment_failure(job_dir)
+
+
+def test_retrying_forced_alignment_replaces_even_a_hand_corrected_timeline(
+    tmp_path: Path,
+) -> None:
+    pipeline, _, job_dir, _ = run_job(tmp_path, ForcedAligner(fail=True), Steps())
+    timeline_path = job_dir / "timeline.json"
+    edited = json.loads(timeline_path.read_text("utf-8"))
+    edited["warnings"].append("manually_edited")
+    timeline_path.write_text(json.dumps(edited), encoding="utf-8")
+
+    # still failing: nothing changes and the reason stays on record
+    assert pipeline.retry_forced_alignment(job_dir) is None
+    assert pipeline.forced_alignment_failure(job_dir) == "no gpu"
+
+    pipeline.primary_aligner = ForcedAligner()
+    timeline = pipeline.retry_forced_alignment(job_dir)
+
+    assert [line.start_ms for line in timeline.lines] == [5_000, 8_000, 11_000]
+    assert pipeline.forced_alignment_failure(job_dir) is None
 
 
 def test_regenerating_an_asr_job_upgrades_it_and_keeps_the_old_transcript(

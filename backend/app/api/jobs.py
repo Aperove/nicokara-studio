@@ -386,10 +386,12 @@ def song_duration_ms(job_dir: Path) -> int | None:
     return round(float(data["duration_seconds"]) * 1000)
 
 
+def job_pipeline(request: Request):
+    return getattr(getattr(request.app.state, "runner", None), "pipeline", None)
+
+
 def alignment_tools(request: Request) -> tuple[object | None, object | None]:
-    pipeline = getattr(
-        getattr(request.app.state, "runner", None), "pipeline", None
-    )
+    pipeline = job_pipeline(request)
     return (
         getattr(pipeline, "aligner", None),
         getattr(pipeline, "primary_aligner", None)
@@ -445,7 +447,17 @@ def get_review(request: Request, job_id: str) -> dict:
         if lyrics_path.is_file()
         else {}
     )
+    pipeline = job_pipeline(request)
+    forced = getattr(pipeline, "primary_aligner", None) is not None
+    is_forced = forced and pipeline._is_forced_transcript(job_dir)
     return {
+        # Whole-song forced alignment is far more accurate than ASR, so a
+        # job that had to do without it says so.
+        "alignment_source": "forced" if is_forced else "asr",
+        "forced_alignment_failure": (
+            pipeline.forced_alignment_failure(job_dir) if forced else None
+        ),
+        "can_retry_forced_alignment": forced and not is_forced,
         # "local" readings come from a dictionary and are wrong more often
         "lyrics_provider": lyrics_info.get("provider"),
         "can_edit_readings": lyrics_path.is_file(),
@@ -513,6 +525,32 @@ def update_readings(request: Request, job_id: str, body: ReadingEdits) -> dict:
         else timeline.to_dict(),
         "changed_lines": changed,
     }
+
+
+@router.post("/{job_id}/timeline/forced")
+def retry_forced_alignment(request: Request, job_id: str) -> dict:
+    """Align the whole song again for a job that fell back to ASR."""
+    _, job_dir = reviewable_job(request, job_id)
+    pipeline = job_pipeline(request)
+    if getattr(pipeline, "primary_aligner", None) is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="本机未启用整首强制对齐",
+        )
+    try:
+        timeline = pipeline.retry_forced_alignment(job_dir)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="整首强制对齐失败，请查看本地服务日志",
+        ) from exc
+    if timeline is None:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="整首强制对齐再次失败："
+            + (pipeline.forced_alignment_failure(job_dir) or "原因未知"),
+        )
+    return {"timeline": write_timeline(job_dir, timeline)}
 
 
 @router.post("/{job_id}/timeline/refine")

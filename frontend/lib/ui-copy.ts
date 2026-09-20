@@ -138,6 +138,14 @@ export const REVIEW_COPY = {
   refining: "AI 对齐中，约需一分钟…",
   refineHint:
     "只需把句子的起止范围大致标对，AI 会在这个范围里重新精确到每个词。",
+  fallbackTitle: "这首歌没能用上整首强制对齐，时间轴来自语音识别，精度较低",
+  fallbackReason: (reason: string) => `原因：${reason}`,
+  fallbackUnknown: "这个任务是在启用整首强制对齐之前处理的，或失败原因没有留下记录。",
+  fallbackRetry: "重试整首对齐",
+  fallbackRetrying: "正在对齐整首歌（约 1 分钟）…",
+  fallbackConfirm:
+    "重试成功后会用新的结果替换当前时间轴，包括已经手动修改过的句子。要继续吗？",
+  fallbackDone: "已改用整首强制对齐的结果，请再听一遍确认",
   refinedResult: (done: number, total: number) =>
     done === total
       ? `已重新对齐 ${done} 句，请再听一遍确认`

@@ -10,7 +10,7 @@ from typing import Any
 from app.ai.whisper import TranscriptDocument
 from app.alignment.editing import MANUALLY_EDITED, retime_line, trim_overlaps
 from app.alignment.models import LyricTimeline
-from app.alignment.refiner import realign_lines
+from app.alignment.refiner import ForcedAlignmentError, realign_lines
 from app.alignment.voice_activity import detect_rests, move_lines_out_of_rests
 from app.core.database import Database
 from app.lyrics.models import LyricDocument
@@ -168,6 +168,7 @@ class TranscriptionPipeline:
     # Says which tool produced transcript.json.  A transcript that already
     # is a forced alignment of the lyrics needs no second refinement pass.
     _TRANSCRIPT_SOURCE_FILE = "transcript.source"
+    _FORCED_FAILURE_FILE = "forced_alignment_failure.json"
     _FORCED_SOURCE = "karatimer"
     _MIN_FORCED_CONFIDENCE = 0.6
 
@@ -183,6 +184,7 @@ class TranscriptionPipeline:
         which case the caller falls back to ASR.
         """
         source_path = job_dir / self._TRANSCRIPT_SOURCE_FILE
+        failure_path = job_dir / self._FORCED_FAILURE_FILE
         if self.primary_aligner is None or self.aligner is None:
             return None
         try:
@@ -190,19 +192,23 @@ class TranscriptionPipeline:
                 lyrics, media_path, work_dir=job_dir
             )
             confidence = self.aligner.align(lyrics, transcript).confidence
-        except Exception:
+            if confidence < self._MIN_FORCED_CONFIDENCE:
+                raise ForcedAlignmentError(
+                    f"only {confidence:.0%} of the lyrics could be placed"
+                )
+        except Exception as exc:
             logger.warning(
                 "Forced alignment of the whole song failed; using ASR instead",
                 exc_info=True,
             )
-            return None
-        if confidence < self._MIN_FORCED_CONFIDENCE:
-            logger.warning(
-                "Forced alignment explained only %.0f%% of the lyrics; "
-                "using ASR instead",
-                confidence * 100,
+            # Falling back is a loss of accuracy the person should see.
+            reason = " ".join(str(exc).split())[:300] or type(exc).__name__
+            failure_path.write_text(
+                json.dumps({"reason": reason}, ensure_ascii=False) + "\n",
+                encoding="utf-8",
             )
             return None
+        failure_path.unlink(missing_ok=True)
         source_path.write_text(self._FORCED_SOURCE + "\n", encoding="utf-8")
         return transcript
 
@@ -212,6 +218,35 @@ class TranscriptionPipeline:
             source_path.is_file()
             and source_path.read_text(encoding="utf-8").strip()
             == self._FORCED_SOURCE
+        )
+
+    def forced_alignment_failure(self, job_dir: Path) -> str | None:
+        """Why this job's timing comes from ASR although an aligner is set up."""
+        failure_path = job_dir / self._FORCED_FAILURE_FILE
+        if self._is_forced_transcript(job_dir) or not failure_path.is_file():
+            return None
+        return json.loads(failure_path.read_text(encoding="utf-8")).get("reason")
+
+    def retry_forced_alignment(self, job_dir: Path) -> Any | None:
+        """Align the whole song again on request; None when it failed again.
+
+        Asked for by a person, so unlike regenerating a job this replaces a
+        timeline that was corrected by hand.
+        """
+        lyrics_path = job_dir / "lyrics_processed.json"
+        transcript_path = job_dir / "transcript.json"
+        self._upgrade_transcript(job_dir)
+        if not self._is_forced_transcript(job_dir):
+            return None
+        self._ensure_clean_stem(job_dir)
+        return self._build_timeline(
+            job_dir,
+            LyricDocument.from_dict(
+                json.loads(lyrics_path.read_text(encoding="utf-8"))
+            ),
+            TranscriptDocument.from_dict(
+                json.loads(transcript_path.read_text(encoding="utf-8"))
+            ),
         )
 
     def _upgrade_transcript(self, job_dir: Path) -> None:

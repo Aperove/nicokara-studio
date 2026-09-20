@@ -35,6 +35,7 @@ import {
   audioTrackUrl,
   getReview,
   refineTimelineLines,
+  retryForcedAlignment,
   renderJob,
   saveReadings,
   saveTimeline,
@@ -43,7 +44,7 @@ import {
 import type { Review, TimelineLine } from "@/types/timeline";
 
 type Draft = { start_ms: number; end_ms: number };
-type Busy = "save" | "refine" | "render" | null;
+type Busy = "save" | "refine" | "render" | "forced" | null;
 
 const PREROLL_MS = 500;
 
@@ -310,7 +311,29 @@ export function TimelineReview({
     return reread;
   }
 
-  async function run(kind: Exclude<Busy, null>) {
+  async function retryForced() {
+    if (!review || busy !== null) return;
+    const edited =
+      review.timeline.warnings.includes("manually_edited") ||
+      dirtyIndexes.length > 0;
+    if (edited && !window.confirm(REVIEW_COPY.fallbackConfirm)) return;
+    setBusy("forced");
+    setError(null);
+    setNotice(null);
+    try {
+      await retryForcedAlignment(jobId);
+      // rests and moved lines change along with the timeline
+      setReview(await getReview(jobId));
+      setDrafts({});
+      setRereadLines([]);
+      setNotice(REVIEW_COPY.fallbackDone);
+    } catch (reason) {
+      setError(feedbackOf(reason));
+    }
+    setBusy(null);
+  }
+
+  async function run(kind: Exclude<Busy, "forced" | null>) {
     if (blocked) return;
     setBusy(kind);
     setError(null);
@@ -472,6 +495,28 @@ export function TimelineReview({
           {REVIEW_COPY.showConcernsOnly}
         </label>
       </div>
+
+      {review.can_retry_forced_alignment && (
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          <p className="min-w-0 flex-1">
+            <span className="font-semibold">{REVIEW_COPY.fallbackTitle}</span>
+            <br />
+            {review.forced_alignment_failure
+              ? REVIEW_COPY.fallbackReason(review.forced_alignment_failure)
+              : REVIEW_COPY.fallbackUnknown}
+          </p>
+          <button
+            type="button"
+            disabled={busy !== null}
+            onClick={retryForced}
+            className="focus-ring rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold transition hover:bg-amber-100 disabled:opacity-50"
+          >
+            {busy === "forced"
+              ? REVIEW_COPY.fallbackRetrying
+              : REVIEW_COPY.fallbackRetry}
+          </button>
+        </div>
+      )}
 
       {review.lyrics_provider === "local" && review.can_edit_readings && (
         <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">

@@ -43,6 +43,11 @@ export type Review = {
   unresolved_lines: number[];
   /** Lines moved to their LRC time because the aligner was far off. */
   lrc_adjusted_lines?: number[];
+  /** "forced": the known lyrics were aligned to the whole song; "asr" is less exact. */
+  alignment_source?: "forced" | "asr";
+  /** Why whole-song alignment was not used although it is set up. */
+  forced_alignment_failure?: string | null;
+  can_retry_forced_alignment?: boolean;
   duration_ms: number | null;
   has_vocals: boolean;
   can_refine: boolean;

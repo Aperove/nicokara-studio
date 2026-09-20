@@ -238,6 +238,14 @@ export function refineTimelineLines(
   );
 }
 
+export function retryForcedAlignment(
+  jobId: string,
+): Promise<{ timeline: Timeline }> {
+  return jsonRequest<{ timeline: Timeline }>(`/jobs/${jobId}/timeline/forced`, {
+    method: "POST",
+  });
+}
+
 export function renderJob(jobId: string): Promise<Job> {
   return jsonRequest<Job>(`/jobs/${jobId}/render`, { method: "POST" });
 }
