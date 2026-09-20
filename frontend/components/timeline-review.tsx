@@ -286,6 +286,52 @@ export function TimelineReview({
     };
   }, [jobId]);
 
+  // Space plays and pauses wherever the focus went: after dragging in the
+  // waveform or clicking a button the player no longer has it, and the
+  // browser's own shortcut only works while it does.
+  useEffect(() => {
+    const takesSpace = (target: EventTarget | null) => {
+      if (!(target instanceof HTMLElement)) return false;
+      if (target === mediaRef.current) return true; // native shortcut
+      if (target instanceof HTMLInputElement) {
+        // sliders and checkboxes have no use for a space; text fields do
+        return !["range", "checkbox", "radio", "color", "button"].includes(
+          target.type,
+        );
+      }
+      return (
+        target.isContentEditable ||
+        ["TEXTAREA", "SELECT"].includes(target.tagName)
+      );
+    };
+    const isSpace = (event: KeyboardEvent) =>
+      event.code === "Space" &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.altKey &&
+      !event.defaultPrevented &&
+      !takesSpace(event.target);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!isSpace(event)) return;
+      event.preventDefault(); // no page scroll
+      const media = mediaRef.current;
+      if (!media || event.repeat) return;
+      stopAtRef.current = null;
+      if (media.paused) void media.play();
+      else media.pause();
+    };
+    // a focused button would otherwise be clicked when the key is released
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (isSpace(event)) event.preventDefault();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+    };
+  }, []);
+
   // Follow the playhead every frame: karaoke fills need finer steps than
   // the ~4 Hz `timeupdate` event provides.
   useEffect(() => {
