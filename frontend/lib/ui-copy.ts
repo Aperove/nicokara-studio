@@ -161,6 +161,7 @@ export const REVIEW_COPY = {
   rendering: "正在提交…",
   invalidRange: "终点必须晚于起点",
   readings: "读音",
+  readingClickHint: "点一下修改这个词的读音",
   readingsTitle: "检查并修改这一句的假名读音",
   readingsHint:
     "读音错了，屏幕上的注音和句内的变色节奏都会跟着错。改完保存后，可以再让 AI 重新对齐这一句。",

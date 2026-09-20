@@ -510,6 +510,18 @@ export function TimelineReview({
     );
   }
 
+  const editReading = (lineIndex: number, tokenIndex: number) => {
+    setOpenReadings(lineIndex);
+    // the editor of that line is rendered by the state change above
+    requestAnimationFrame(() => {
+      const input = document.querySelector<HTMLInputElement>(
+        `[data-reading="${lineIndex}:${tokenIndex}"]`,
+      );
+      input?.focus();
+      input?.select();
+    });
+  };
+
   // The player is rebuilt in the other layout; it picks up where it was.
   const toggleWorkbench = (next: boolean) => {
     resumeAtRef.current = mediaRef.current?.currentTime ?? 0;
@@ -730,7 +742,42 @@ export function TimelineReview({
               <span className="w-6 shrink-0 text-right font-mono text-xs text-muted-foreground">
                 {index + 1}
               </span>
-              <span className="min-w-40 flex-1 text-sm">{line.surface}</span>
+              <span className="min-w-40 flex-1 text-sm leading-loose">
+                {review.can_edit_readings
+                  ? line.tokens.map((token, tokenIndex) => {
+                      if (!KANJI.test(token.surface) || !token.reading) {
+                        return <span key={tokenIndex}>{token.surface}</span>;
+                      }
+                      // The reading is shown where it will be rendered, so
+                      // a wrong one is seen without opening anything.
+                      const key = `${index}:${tokenIndex}`;
+                      const changed = key in readingDrafts;
+                      return (
+                        <ruby
+                          key={tokenIndex}
+                          role="button"
+                          tabIndex={0}
+                          title={REVIEW_COPY.readingClickHint}
+                          onClick={() => editReading(index, tokenIndex)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              editReading(index, tokenIndex);
+                            }
+                          }}
+                          className={`focus-ring cursor-pointer rounded-sm transition hover:bg-primary/10 ${
+                            changed ? "text-primary" : ""
+                          }`}
+                        >
+                          {token.surface}
+                          <rt className="select-none text-[0.6em] text-muted-foreground">
+                            {changed ? readingDrafts[key] : token.reading}
+                          </rt>
+                        </ruby>
+                      );
+                    })
+                  : line.surface}
+              </span>
               {concerns.includes("short") && (
                 <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
                   {REVIEW_COPY.concernShort}
@@ -863,6 +910,7 @@ export function TimelineReview({
                           maxLength={64}
                           aria-invalid={bad}
                           aria-label={`${token.surface} ${REVIEW_COPY.readings}`}
+                          data-reading={key}
                           title={bad ? REVIEW_COPY.readingInvalid : undefined}
                           onChange={(event) => {
                             const next = event.target.value;
