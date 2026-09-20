@@ -467,8 +467,10 @@ export function JobStatus({ jobId }: { jobId: string }) {
         </>
       )}
 
-      {(job.status === "COMPLETED" ||
-        job.status === "SUBTITLE_GENERATED") && (
+      {/* the review has its own style section, next to a live preview */}
+      {!reviewOpen &&
+        (job.status === "COMPLETED" ||
+          job.status === "SUBTITLE_GENERATED") && (
         <RestylePanel
           key={job.updated_at}
           jobId={job.id}

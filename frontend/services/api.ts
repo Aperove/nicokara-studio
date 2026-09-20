@@ -256,8 +256,12 @@ export function retryForcedAlignment(
   });
 }
 
-export function renderJob(jobId: string): Promise<Job> {
-  return jsonRequest<Job>(`/jobs/${jobId}/render`, { method: "POST" });
+export function renderJob(jobId: string, style?: SubtitleStyle): Promise<Job> {
+  return jsonRequest<Job>(`/jobs/${jobId}/render`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(style ?? null),
+  });
 }
 
 export function sourceVideoUrl(jobId: string): string {

@@ -372,3 +372,26 @@ def test_pipeline_pauses_for_review_then_renders_the_corrected_timeline(
     pipeline.process(job_id)
     stored = json.loads(timeline_path.read_text("utf-8"))
     assert stored["lines"][2]["start_ms"] == 40_000
+
+
+def test_the_style_chosen_while_reviewing_is_stored_with_the_render_request(
+    tmp_path: Path,
+) -> None:
+    runner = RecordingRunner(InlinePipeline(LyricTimelineAligner(), None))
+    with review_client(tmp_path, runner) as client:
+        job_id, job_dir = prepare_review_job(client, tmp_path)
+        base = f"/api/v1/jobs/{job_id}"
+        style = client.get(f"{base}/style").json()
+
+        invalid = client.post(f"{base}/render", json={**style, "sung_color": "red"})
+        assert invalid.status_code == 422
+        queued_before = len(runner.enqueued)
+
+        chosen = client.post(
+            f"{base}/render", json={**style, "sung_color": "#38BDF8", "glow": False}
+        )
+
+        assert chosen.status_code == 200
+        assert len(runner.enqueued) == queued_before + 1
+        stored = json.loads((job_dir / "style.json").read_text("utf-8"))
+        assert (stored["sung_color"], stored["glow"]) == ("#38BDF8", False)

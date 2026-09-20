@@ -10,7 +10,14 @@ import {
   Save,
   Sparkles,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { ErrorFeedbackPanel } from "@/components/error-feedback";
 import { TimelineTrack } from "@/components/timeline-track";
@@ -30,9 +37,11 @@ import {
   typicalPace,
 } from "@/lib/timeline";
 import { REVIEW_COPY } from "@/lib/ui-copy";
+import { StylePanel, outlineShadow } from "@/components/style-panel";
 import {
   ApiRequestError,
   audioTrackUrl,
+  getJobStyle,
   getReview,
   refineTimelineLines,
   retryForcedAlignment,
@@ -41,6 +50,7 @@ import {
   saveTimeline,
   sourceVideoUrl,
 } from "@/services/api";
+import { DEFAULT_SUBTITLE_STYLE, type SubtitleStyle } from "@/types/style";
 import type { Review, TimelineLine } from "@/types/timeline";
 
 type Draft = { start_ms: number; end_ms: number };
@@ -96,36 +106,107 @@ function TimeInput({
   );
 }
 
+const KANJI = /[\u3400-\u9fff\uf900-\ufaff々〆ヶ]/;
+
 function KaraokePreview({
   line,
   timeMs,
+  style,
 }: {
   line: TimelineLine | null;
   timeMs: number;
+  style: SubtitleStyle;
 }) {
   const visible =
-    line && timeMs >= line.start_ms - 3000 && timeMs <= line.end_ms + 400;
+    line &&
+    timeMs >= line.start_ms - style.lead_in_ms &&
+    timeMs <= line.end_ms + 400;
+  // the video is 1080 lines tall; the preview strip shows text at ~30%
+  const size = Math.max(16, Math.round(style.font_size * 0.3));
+  const outline = outlineShadow(style.outline_color, Math.max(1, size / 14));
+  const fontFamily = `"${style.font_name}", sans-serif`;
+
+  // A long line is scaled down to the strip, the way the renderer shrinks
+  // the font so a line fits the frame.
+  const stripRef = useRef<HTMLDivElement | null>(null);
+  const textRef = useRef<HTMLSpanElement | null>(null);
+  useLayoutEffect(() => {
+    const strip = stripRef.current;
+    const text = textRef.current;
+    if (!strip || !text) return;
+    const fit = () => {
+      text.style.transform = "none";
+      const room = strip.clientWidth - 32;
+      const scale = Math.min(1, room / Math.max(1, text.scrollWidth));
+      text.style.transform = `scale(${scale})`;
+    };
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(strip);
+    return () => observer.disconnect();
+  }, [line, visible, size, fontFamily, style.show_ruby]);
+
   return (
     <div
+      ref={stripRef}
       aria-hidden
-      className="flex min-h-16 items-center justify-center rounded-xl bg-slate-800 px-4 py-3 text-center text-2xl font-bold leading-tight sm:text-3xl"
+      className="flex min-h-24 items-center justify-center overflow-hidden rounded-xl px-4 py-3 text-center font-bold leading-tight"
+      style={{
+        background:
+          "linear-gradient(135deg, #334155 0%, #64748b 50%, #cbd5e1 100%)",
+      }}
     >
       {visible && line ? (
-        <span>
-          {line.tokens.map((token, index) => (
-            <span key={index} className="relative inline-block whitespace-pre">
-              <span className="text-white">{token.surface}</span>
+        <span
+          ref={textRef}
+          className="inline-block"
+          style={{ fontFamily, fontSize: size, whiteSpace: "nowrap" }}
+        >
+          {line.tokens.map((token, index) => {
+            const width = `${tokenProgress(token, timeMs) * 100}%`;
+            const ruby =
+              style.show_ruby && token.reading && KANJI.test(token.surface)
+                ? token.reading
+                : null;
+            return (
               <span
-                className="absolute inset-y-0 left-0 overflow-hidden text-[#FF6B6B]"
-                style={{ width: `${tokenProgress(token, timeMs) * 100}%` }}
+                key={index}
+                className="relative inline-block whitespace-pre align-bottom"
+                style={{ paddingTop: style.show_ruby ? size * 0.5 : 0 }}
               >
-                {token.surface}
+                {ruby && (
+                  <span
+                    className="absolute inset-x-0 top-0 text-center leading-none"
+                    style={{
+                      color: style.unsung_color,
+                      fontSize: size * 0.4,
+                      textShadow: outline,
+                    }}
+                  >
+                    {ruby}
+                  </span>
+                )}
+                <span style={{ color: style.unsung_color, textShadow: outline }}>
+                  {token.surface}
+                </span>
+                <span
+                  className="absolute bottom-0 left-0 overflow-hidden"
+                  style={{
+                    width,
+                    color: style.sung_color,
+                    textShadow: style.glow
+                      ? `0 0 ${size / 3}px ${style.sung_color}`
+                      : "none",
+                  }}
+                >
+                  {token.surface}
+                </span>
               </span>
-            </span>
-          ))}
+            );
+          })}
         </span>
       ) : (
-        <span className="text-base font-normal text-slate-400">
+        <span className="text-base font-normal text-slate-200">
           {REVIEW_COPY.previewIdle}
         </span>
       )}
@@ -151,6 +232,9 @@ export function TimelineReview({
   // lines whose reading changed since they were last re-aligned
   const [rereadLines, setRereadLines] = useState<number[]>([]);
   const [busy, setBusy] = useState<Busy>(null);
+  const [style, setStyle] = useState<SubtitleStyle>(DEFAULT_SUBTITLE_STYLE);
+  const [styleDirty, setStyleDirty] = useState(false);
+  const [styleOpen, setStyleOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<ErrorFeedback | null>(null);
   const mediaRef = useRef<HTMLMediaElement | null>(null);
@@ -165,6 +249,13 @@ export function TimelineReview({
       })
       .catch((reason) => {
         if (active) setError(feedbackOf(reason));
+      });
+    getJobStyle(jobId)
+      .then((value) => {
+        if (active) setStyle(value);
+      })
+      .catch(() => {
+        // the preview falls back to the default style
       });
     return () => {
       active = false;
@@ -353,7 +444,7 @@ export function TimelineReview({
         );
       }
       if (kind === "render") {
-        await renderJob(jobId);
+        await renderJob(jobId, styleDirty ? style : undefined);
         onRenderQueued();
         return;
       }
@@ -455,7 +546,37 @@ export function TimelineReview({
         <KaraokePreview
           line={current >= 0 ? lines[current] : null}
           timeMs={timeMs}
+          style={style}
         />
+        <div className="rounded-xl border bg-card/60 px-3 py-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-semibold">{REVIEW_COPY.styleTitle}</p>
+            <button
+              type="button"
+              aria-expanded={styleOpen}
+              onClick={() => setStyleOpen((open) => !open)}
+              className="focus-ring rounded-lg border bg-card px-3 py-1.5 text-xs font-semibold transition hover:bg-muted"
+            >
+              {styleOpen ? REVIEW_COPY.styleClose : REVIEW_COPY.styleOpen}
+            </button>
+          </div>
+          {styleOpen && (
+            <div className="mt-3 space-y-3">
+              <p className="text-xs text-muted-foreground">
+                {REVIEW_COPY.styleHint}
+              </p>
+              <StylePanel
+                value={style}
+                onChange={(next) => {
+                  setStyle(next);
+                  setStyleDirty(true);
+                }}
+                disabled={busy !== null}
+                showPreview={false}
+              />
+            </div>
+          )}
+        </div>
         <TimelineTrack
           lines={lines}
           rests={review.rests}

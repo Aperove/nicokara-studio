@@ -37,9 +37,11 @@ type Props = {
   value: SubtitleStyle;
   onChange: (value: SubtitleStyle) => void;
   disabled?: boolean;
+  /** Off where something better than the sample text shows the style. */
+  showPreview?: boolean;
 };
 
-function outlineShadow(color: string, width: number): string {
+export function outlineShadow(color: string, width: number): string {
   const offsets = [
     [-1, -1],
     [1, -1],
@@ -116,11 +118,14 @@ function ColorField({
   );
 }
 
-export function StylePanel({ value, onChange, disabled }: Props) {
-  const set = <K extends keyof SubtitleStyle>(
-    key: K,
-    next: SubtitleStyle[K],
-  ) => onChange({ ...value, [key]: next });
+export function StylePanel({
+  value,
+  onChange,
+  disabled,
+  showPreview = true,
+}: Props) {
+  const set = <K extends keyof SubtitleStyle>(key: K, next: SubtitleStyle[K]) =>
+    onChange({ ...value, [key]: next });
 
   const isListedFont = FONT_OPTIONS.some(
     (font) => font.name === value.font_name,
@@ -141,59 +146,67 @@ export function StylePanel({ value, onChange, disabled }: Props) {
 
   return (
     <div className="space-y-4">
-      <div
-        aria-hidden
-        className="flex h-40 overflow-hidden rounded-2xl border p-4"
-        style={{
-          alignItems,
-          justifyContent:
-            value.layout === "centered" ? "center" : "flex-start",
-          background:
-            "linear-gradient(135deg, #334155 0%, #64748b 50%, #cbd5e1 100%)",
-        }}
-      >
-        <div className="text-center leading-none">
-          {value.show_ruby && (
-            <div
-              style={{
-                color: value.unsung_color,
-                fontFamily: `"${value.font_name}", sans-serif`,
-                fontSize: previewSize * 0.4,
-                fontWeight: 700,
-                textShadow: outline,
-                textAlign: "left",
-                paddingLeft: previewSize * 0.15,
-                marginBottom: 2,
-              }}
-            >
-              しけん
-            </div>
-          )}
+      {showPreview && (
+        <>
           <div
+            aria-hidden
+            className="flex h-40 overflow-hidden rounded-2xl border p-4"
             style={{
-              fontFamily: `"${value.font_name}", sans-serif`,
-              fontSize: previewSize,
-              fontWeight: 700,
-              whiteSpace: "nowrap",
+              alignItems,
+              justifyContent:
+                value.layout === "centered" ? "center" : "flex-start",
+              background:
+                "linear-gradient(135deg, #334155 0%, #64748b 50%, #cbd5e1 100%)",
             }}
           >
-            <span
-              style={{
-                color: value.sung_color,
-                textShadow: value.glow
-                  ? `0 0 ${previewSize / 3}px ${value.sung_color}`
-                  : "none",
-              }}
-            >
-              {PREVIEW_BASE.slice(0, PREVIEW_SUNG_CHARS)}
-            </span>
-            <span style={{ color: value.unsung_color, textShadow: outline }}>
-              {PREVIEW_BASE.slice(PREVIEW_SUNG_CHARS)}
-            </span>
+            <div className="text-center leading-none">
+              {value.show_ruby && (
+                <div
+                  style={{
+                    color: value.unsung_color,
+                    fontFamily: `"${value.font_name}", sans-serif`,
+                    fontSize: previewSize * 0.4,
+                    fontWeight: 700,
+                    textShadow: outline,
+                    textAlign: "left",
+                    paddingLeft: previewSize * 0.15,
+                    marginBottom: 2,
+                  }}
+                >
+                  しけん
+                </div>
+              )}
+              <div
+                style={{
+                  fontFamily: `"${value.font_name}", sans-serif`,
+                  fontSize: previewSize,
+                  fontWeight: 700,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                <span
+                  style={{
+                    color: value.sung_color,
+                    textShadow: value.glow
+                      ? `0 0 ${previewSize / 3}px ${value.sung_color}`
+                      : "none",
+                  }}
+                >
+                  {PREVIEW_BASE.slice(0, PREVIEW_SUNG_CHARS)}
+                </span>
+                <span
+                  style={{ color: value.unsung_color, textShadow: outline }}
+                >
+                  {PREVIEW_BASE.slice(PREVIEW_SUNG_CHARS)}
+                </span>
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
-      <p className="text-xs text-muted-foreground">{STYLE_COPY.previewHint}</p>
+          <p className="text-xs text-muted-foreground">
+            {STYLE_COPY.previewHint}
+          </p>
+        </>
+      )}
 
       <div className="text-sm">
         <span className="mb-1.5 block font-medium">
@@ -325,7 +338,9 @@ export function StylePanel({ value, onChange, disabled }: Props) {
             }`}
           >
             <span className="block text-xl font-bold leading-7">…</span>
-            <span className="mt-0.5 block text-xs">{STYLE_COPY.customFont}</span>
+            <span className="mt-0.5 block text-xs">
+              {STYLE_COPY.customFont}
+            </span>
           </button>
         </div>
         {(customFontOpen || !isListedFont) && (

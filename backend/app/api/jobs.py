@@ -629,10 +629,18 @@ def refine_timeline_lines(
 
 
 @router.post("/{job_id}/render", response_model=JobResponse)
-async def render_job(request: Request, job_id: str) -> JobResponse:
-    """Render the video from the (possibly hand-corrected) timeline."""
+async def render_job(
+    request: Request,
+    job_id: str,
+    style: SubtitleStyle | None = None,
+) -> JobResponse:
+    """Render the video from the (possibly hand-corrected) timeline.
+
+    The style can be chosen while reviewing, next to the live preview; it
+    is stored only once the queue has room for the job.
+    """
     _, database = services(request)
-    reviewable_job(request, job_id)
+    _, job_dir = reviewable_job(request, job_id)
     runner = getattr(request.app.state, "runner", None)
     if runner is None or not getattr(runner, "can_accept", True):
         raise HTTPException(
@@ -640,6 +648,8 @@ async def render_job(request: Request, job_id: str) -> JobResponse:
             detail="Processing queue is full. Try again later.",
             headers={"Retry-After": "60"},
         )
+    if style is not None:
+        write_style(job_dir, style)
     database.update_job_state(
         job_id,
         status="UPLOADED",

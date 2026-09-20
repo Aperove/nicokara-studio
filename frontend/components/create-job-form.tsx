@@ -331,7 +331,12 @@ export function CreateJobForm({ allowLinks = true }: { allowLinks?: boolean }) {
           </div>
           {styleOpen && (
             <div className="mt-4">
-              <StylePanel value={style} onChange={setStyle} disabled={submitting} />
+              <StylePanel
+                value={style}
+                onChange={setStyle}
+                disabled={submitting}
+                showPreview={false}
+              />
             </div>
           )}
         </div>
