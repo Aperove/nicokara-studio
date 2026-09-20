@@ -24,6 +24,12 @@ ai = [
   "faster-whisper>=1.2,<2",
   "scipy>=1.14,<2",
 ]
+# Better local readings (verbs and adjectives with okurigana) through
+# morphological analysis; without it pykakasi is used.  The "-plus" fork
+# ships prebuilt wheels, the original package has to be compiled.
+reading = [
+  "pyopenjtalk-plus>=0.4.1",
+]
 dev = [
   "httpx2>=2,<3",
   "pytest>=8.4,<9",

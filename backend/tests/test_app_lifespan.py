@@ -8,11 +8,19 @@ from app.core.config import Settings
 from app.main import create_app
 from app.lyrics.processor import (
     LocalJapaneseLyricProcessor,
+    OpenJTalkLyricProcessor,
+    openjtalk_available,
     ResilientLyricProcessor,
 )
 from app.tasks.runner import LocalTaskRunner
 from app.vocal.mdx import MDXNetVocalRemover
 from app.vocal.remover import VocalRemover
+
+
+# Morphological analysis is preferred for local readings when installed.
+LOCAL_PROCESSOR = (
+    OpenJTalkLyricProcessor if openjtalk_available() else LocalJapaneseLyricProcessor
+)
 
 
 def test_app_builds_local_runner_when_processing_is_enabled(tmp_path: Path) -> None:
@@ -39,7 +47,7 @@ def test_app_builds_local_runner_when_processing_is_enabled(tmp_path: Path) -> N
         assert app.state.runner.pipeline.transcriber.compute_type == "int8"
         assert isinstance(
             app.state.runner.pipeline.lyric_processor,
-            LocalJapaneseLyricProcessor,
+            LOCAL_PROCESSOR,
         )
         assert app.state.runner.pipeline.video_renderer.preset == "veryfast"
         assert app.state.runner.pipeline.video_renderer.crf == 21
@@ -64,7 +72,7 @@ def test_app_prefers_deepseek_when_api_key_is_configured(tmp_path: Path) -> None
         assert isinstance(processor, ResilientLyricProcessor)
         assert processor.primary.client.model == "deepseek-v4-flash"
         assert processor.primary.client.api_key == "secret"
-        assert isinstance(processor.fallback, LocalJapaneseLyricProcessor)
+        assert isinstance(processor.fallback, LOCAL_PROCESSOR)
 
 
 def test_app_uses_configured_mdx_net_vocal_remover(

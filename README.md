@@ -38,7 +38,7 @@
 | 任务列表 | 首页右侧显示最近任务的状态和进度，自动刷新，点击进入任务页 |
 | 两个版本 | 每个任务同时生成 `ON VOCAL`（原唱）和 `OFF VOCAL`（MDX-Net 去除主唱的伴奏）两个成片；字幕只烧录一次，伴奏版只替换音轨，约多花几秒 |
 | 歌声识别 | FFmpeg 提取音频，faster-whisper 日语识别；默认先分离出人声轨再识别，转录进度实时显示 |
-| 歌词处理 | DeepSeek（可选）或本地 pykakasi 生成读音、分词和 Ruby 注音 |
+| 歌词处理 | 生成读音、分词和 Ruby 注音：DeepSeek（可选），或本机的 OpenJTalk 形态分析（推荐安装），都没有时退回 pykakasi 逐字查词典 |
 | 时间轴对齐 | 音节级全局对齐；可选 karatimer 整首强制对齐（成功时跳过 Whisper）或 Qwen3 分段精修；可选间奏检测与修复；任何一步失败都自动退回上一级结果 |
 | 核对与修正 | 合成前暂停等待核对；逐句播放、修改起止时间、打点、在波形上拖动；检查并修改假名读音；AI 重新对齐单句；手动修改不会被后续自动对齐覆盖 |
 | 字幕样式 | 配色方案、字体、字号、排布、垂直位置、假名注音、发光、提前显示时间；带实时预览 |
@@ -125,7 +125,7 @@ storage/jobs/{job_id}/
 - 前端：Next.js、React、TypeScript、Tailwind CSS
 - 后端：FastAPI、SQLite
 - 音视频：FFmpeg、libass、MDX-Net（audio-separator）
-- 识别与歌词：faster-whisper、DeepSeek（可选）、pykakasi（本地降级）
+- 识别与歌词：faster-whisper、DeepSeek（可选）、OpenJTalk（本机读音，可选）、pykakasi（兜底）
 - 强制对齐：karatimer（推荐）或 Qwen3-ForcedAligner-0.6B；间奏检测：Mel-Band Roformer 人声分离（均可选，GPU）
 - 部署：Docker Compose，或 Linux + Nginx + systemd
 
@@ -187,6 +187,12 @@ npm.cmd run dev -- --host 127.0.0.1 --port 3200
 ```
 
 还需要 FFmpeg。可以让 `ffmpeg` 能从 `PATH` 调用，也可以用 `NICOKARA_FFMPEG_PATH` 指向具体的可执行文件（文件名需为 `ffmpeg` / `ffmpeg.exe`）；后端启动时会把它所在的目录加入 `PATH`，供人声分离库调用。
+
+建议再装上本机读音用的形态分析器（有预编译包，不需要编译）。没有它时读音靠 pykakasi 逐字查词典，带送假名的动词、形容词经常被读成音读（例如把“紡いで”读成“ぼういで”）：
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -e ".[reading]"
+```
 
 后端配置写在 `backend/.env`，可从仓库根目录的 `.env.example` 复制需要的项。首次处理任务时会自动下载 faster-whisper 模型和 MDX-Net 模型。
 
@@ -309,12 +315,12 @@ npm.cmd test
 npm.cmd run build
 ```
 
-当前基线：后端 198 项测试；前端 8 个测试文件、43 项测试。类型检查中 `frontend/worker/index.ts` 有两个缺少 Cloudflare 类型定义的既有报错，与功能无关。
+当前基线：后端 203 项测试；前端 8 个测试文件、43 项测试。类型检查中 `frontend/worker/index.ts` 有两个缺少 Cloudflare 类型定义的既有报错，与功能无关。
 
 ## 已知限制
 
 - 核对界面只能调整整句的起止时间（可在波形时间轴上拖动），不能逐字调整。
-- 读音可以在核对界面里逐词修改，但不会自动找出读错的词，需要人工过一遍；歌词原文（汉字写法）本身还不能在界面里改。
+- 本机读音即使用了形态分析也会有错（人名、生僻词、歌词里的特殊读法），可以在核对界面里逐词修改，但不会自动找出读错的词，需要人工过一遍；歌词原文（汉字写法）本身还不能在界面里改。
 - 必须提供歌词；没有无歌词模式。LRC 只用它的句子起点做兜底，逐字时间（增强型 LRC）和 ASS 字幕文件里的时间不会被采用。
 - 字幕样式不能保存为个人预设；描边粗细等更细的参数还不能调。
 - 和声跨过句子边界时，相邻两句的分界可能偏差零点几秒；人工打点本身也有约 0.3 秒的浮动。
@@ -337,7 +343,7 @@ npm.cmd run build
 
 - 原项目：[Xuan-cc/nicokara-studio](https://github.com/Xuan-cc/nicokara-studio)。本仓库是它的 fork，整体架构、处理流程和部署脚本均来自原项目。
 - 整首强制对齐来自 [Jerry-at-GH/karatimer](https://github.com/Jerry-at-GH/karatimer)（Apache-2.0）。本项目只在运行时调用它，没有包含它的代码；它使用的 [NextFire/mms-300m-ForcedAligner-karaoke-ja-Latn](https://huggingface.co/NextFire/mms-300m-ForcedAligner-karaoke-ja-Latn) 模型为 CC-BY-NC-SA-4.0（非商用）。
-- 使用的开源组件与模型：[faster-whisper](https://github.com/SYSTRAN/faster-whisper)、[Qwen3-ASR / Qwen3-ForcedAligner](https://github.com/QwenLM/Qwen3-ASR)、[audio-separator](https://github.com/nomadkaraoke/python-audio-separator) 与 UVR 社区的 MDX-Net 模型、[pykakasi](https://codeberg.org/miurahr/pykakasi)、FFmpeg、libass。各组件和模型遵循其各自的许可证。
+- 使用的开源组件与模型：[faster-whisper](https://github.com/SYSTRAN/faster-whisper)、[Qwen3-ASR / Qwen3-ForcedAligner](https://github.com/QwenLM/Qwen3-ASR)、[audio-separator](https://github.com/nomadkaraoke/python-audio-separator) 与 UVR 社区的 MDX-Net 模型、[pykakasi](https://codeberg.org/miurahr/pykakasi)、[pyopenjtalk-plus](https://github.com/tsukumijima/pyopenjtalk-plus)（OpenJTalk）、FFmpeg、libass。各组件和模型遵循其各自的许可证。
 
 ## 许可
 

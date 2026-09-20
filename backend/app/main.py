@@ -21,7 +21,9 @@ from app.schemas.jobs import HealthResponse
 from app.lyrics.processor import (
     DeepSeekLyricProcessor,
     LocalJapaneseLyricProcessor,
+    OpenJTalkLyricProcessor,
     ResilientLyricProcessor,
+    openjtalk_available,
 )
 from app.tasks.pipeline import TranscriptionPipeline
 from app.tasks.runner import LocalTaskRunner
@@ -120,7 +122,11 @@ def create_app(
             )
         active_runner = runner
         if active_runner is None and resolved_settings.processing_enabled:
-            local_lyric_processor = LocalJapaneseLyricProcessor()
+            local_lyric_processor = (
+                OpenJTalkLyricProcessor()
+                if openjtalk_available()
+                else LocalJapaneseLyricProcessor()
+            )
             if resolved_settings.deepseek_api_key is not None:
                 lyric_processor = ResilientLyricProcessor(
                     primary=DeepSeekLyricProcessor(
