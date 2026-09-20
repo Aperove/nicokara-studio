@@ -1,3 +1,4 @@
+import { HEADER_HEIGHT, PAGE_WIDTH } from "@/lib/layout";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import Link from "next/link";
@@ -42,7 +43,9 @@ export default function RootLayout({
     <html lang="zh-CN">
       <body className="min-h-screen">
         <header className="border-b bg-background/85 backdrop-blur">
-          <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4 sm:px-8">
+          <div
+            className={`${PAGE_WIDTH} ${HEADER_HEIGHT} flex items-center justify-between`}
+          >
             <Link href="/" className="focus-ring rounded-sm">
               <span className="font-display text-lg font-bold tracking-[0.08em]">
                 ニコカラ

@@ -21,6 +21,12 @@
 }
 
 @layer base {
+  /* The review workbench stops the page from scrolling; keeping the
+     scrollbar's gutter stops everything from shifting sideways then. */
+  html {
+    scrollbar-gutter: stable;
+  }
+
   * {
     @apply border-border;
   }

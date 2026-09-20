@@ -1,4 +1,5 @@
 import { JobStatus } from "@/components/job-status";
+import { PAGE_WIDTH } from "@/lib/layout";
 
 export default async function JobPage({
   params,
@@ -8,7 +9,7 @@ export default async function JobPage({
   const { jobId } = await params;
 
   return (
-    <main className="mx-auto max-w-3xl px-5 py-12 sm:px-8 sm:py-20">
+    <main className={`${PAGE_WIDTH} py-8`}>
       <JobStatus jobId={jobId} />
     </main>
   );

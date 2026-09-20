@@ -50,7 +50,10 @@ function ResultVideos({ job }: { job: Job }) {
   const shown: VocalVersion = offAvailable ? version : "on";
 
   return (
-    <section className="mt-8" aria-labelledby="result-video-heading">
+    <section
+      className="rounded-3xl border bg-card p-6 sm:p-8"
+      aria-labelledby="result-video-heading"
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 id="result-video-heading" className="font-display text-xl font-bold">
           {JOB_COPY.resultHeading}
@@ -167,7 +170,7 @@ function RestylePanel({
 
   return (
     <section
-      className="rounded-3xl border bg-card p-6 sm:p-9"
+      className="rounded-3xl border bg-card p-6"
       aria-labelledby="restyle-heading"
     >
       <h2
@@ -299,6 +302,9 @@ export function JobStatus({ jobId }: { jobId: string }) {
           }}
         />
       )}
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_30rem] xl:items-start">
+        <div className="min-w-0 space-y-6">
+          {job.status === "COMPLETED" && <ResultVideos job={job} />}
       <div className="rounded-3xl border bg-card p-6 sm:p-9">
         <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -342,7 +348,25 @@ export function JobStatus({ jobId }: { jobId: string }) {
           <span>{job.progress}%</span>
         </div>
 
-        <dl className="mt-8 grid gap-4 sm:grid-cols-2">
+        {job.status === "FAILED" && (
+          <div className="mt-6">
+            <ErrorFeedbackPanel
+              feedback={jobFailureFeedback(
+                job.error_code,
+                job.stage,
+                job.error_message,
+                job.id,
+              )}
+            />
+          </div>
+        )}
+
+      </div>
+        </div>
+
+        <aside className="space-y-6">
+          <div className="rounded-3xl border bg-card p-6">
+        <dl className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
           <div className="rounded-xl bg-muted/65 p-4">
             <dt className="flex items-center gap-2 text-xs text-muted-foreground">
               <FileVideo className="size-4" />
@@ -370,25 +394,12 @@ export function JobStatus({ jobId }: { jobId: string }) {
           </div>
         </dl>
 
-        {job.status === "FAILED" && (
-          <div className="mt-6">
-            <ErrorFeedbackPanel
-              feedback={jobFailureFeedback(
-                job.error_code,
-                job.stage,
-                job.error_message,
-                job.id,
-              )}
-            />
-          </div>
-        )}
-
         {(job.status === "TRANSCRIBED" ||
           job.status === "LYRICS_PROCESSED" ||
           job.status === "ALIGNED" ||
           job.status === "SUBTITLE_GENERATED" ||
           job.status === "COMPLETED") && (
-          <div className="mt-6 flex flex-wrap gap-3">
+          <div className="mt-5 flex flex-wrap gap-3">
             <a
               href={transcriptUrl(job.id)}
               className="focus-ring inline-flex items-center gap-2 rounded-lg border bg-card px-4 py-2.5 text-sm font-semibold transition hover:bg-muted"
@@ -432,51 +443,31 @@ export function JobStatus({ jobId }: { jobId: string }) {
           </div>
         )}
 
-        {job.status === "COMPLETED" && <ResultVideos job={job} />}
-      </div>
+          </div>
 
-      {job.status === "AWAITING_REVIEW" && (
-        <TimelineReview
-          jobId={job.id}
-          onRenderQueued={() => setRefreshKey((value) => value + 1)}
-        />
-      )}
-
-      {(job.status === "COMPLETED" ||
-        job.status === "SUBTITLE_GENERATED") && (
-        <>
-          <button
-            type="button"
-            aria-expanded={reviewOpen}
-            onClick={() => setReviewOpen((open) => !open)}
-            className="focus-ring inline-flex items-center gap-2 rounded-lg border bg-card px-4 py-2.5 text-sm font-semibold transition hover:bg-muted"
-          >
-            <Clapperboard className="size-4" />
-            {reviewOpen ? REVIEW_COPY.close : REVIEW_COPY.openFromCompleted}
-          </button>
-          {reviewOpen && (
-            <TimelineReview
-              key={`review-${job.updated_at}`}
-              jobId={job.id}
-              onRenderQueued={() => {
-                setReviewOpen(false);
-                setRefreshKey((value) => value + 1);
-              }}
-            />
+          {(job.status === "COMPLETED" ||
+            job.status === "SUBTITLE_GENERATED") && (
+            <button
+              type="button"
+              aria-expanded={reviewOpen}
+              onClick={() => setReviewOpen((open) => !open)}
+              className="focus-ring inline-flex w-full items-center justify-center gap-2 rounded-lg border bg-card px-4 py-2.5 text-sm font-semibold transition hover:bg-muted"
+            >
+              <Clapperboard className="size-4" />
+              {reviewOpen ? REVIEW_COPY.close : REVIEW_COPY.openFromCompleted}
+            </button>
           )}
-        </>
-      )}
 
-      {/* the review has its own style section, next to a live preview */}
-      {!reviewOpen &&
-        (job.status === "COMPLETED" ||
-          job.status === "SUBTITLE_GENERATED") && (
-        <RestylePanel
-          key={job.updated_at}
-          jobId={job.id}
-          onQueued={() => setRefreshKey((value) => value + 1)}
-        />
-      )}
+          {/* the review has its own style section, next to a live preview */}
+          {!reviewOpen &&
+            (job.status === "COMPLETED" ||
+              job.status === "SUBTITLE_GENERATED") && (
+              <RestylePanel
+                key={job.updated_at}
+                jobId={job.id}
+                onQueued={() => setRefreshKey((value) => value + 1)}
+              />
+            )}
 
       <Link
         href="/"
@@ -484,6 +475,31 @@ export function JobStatus({ jobId }: { jobId: string }) {
       >
         {JOB_COPY.createAnother}
       </Link>
+        </aside>
+      </div>
+
+      {job.status === "AWAITING_REVIEW" && (
+        <TimelineReview
+          jobId={job.id}
+          title={job.original_video_name}
+          onRenderQueued={() => setRefreshKey((value) => value + 1)}
+        />
+      )}
+
+      {reviewOpen &&
+        (job.status === "COMPLETED" ||
+          job.status === "SUBTITLE_GENERATED") && (
+          <TimelineReview
+            key={`review-${job.updated_at}`}
+            jobId={job.id}
+            title={job.original_video_name}
+            onClose={() => setReviewOpen(false)}
+            onRenderQueued={() => {
+              setReviewOpen(false);
+              setRefreshKey((value) => value + 1);
+            }}
+          />
+        )}
     </div>
   );
 }

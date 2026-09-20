@@ -5,8 +5,6 @@ import {
   BookOpenText,
   Clapperboard,
   LoaderCircle,
-  Maximize2,
-  Minimize2,
   Palette,
   Play,
   RotateCcw,
@@ -42,6 +40,7 @@ import {
   tokenProgress,
   typicalPace,
 } from "@/lib/timeline";
+import { BELOW_HEADER, PAGE_WIDTH } from "@/lib/layout";
 import { REVIEW_COPY } from "@/lib/ui-copy";
 import { StylePanel, outlineShadow } from "@/components/style-panel";
 import {
@@ -231,9 +230,15 @@ function subscribeToWorkbenchQuery(onChange: () => void) {
 
 export function TimelineReview({
   jobId,
+  title,
+  onClose,
   onRenderQueued,
 }: {
   jobId: string;
+  /** shown in the workbench bar, which covers the rest of the job page */
+  title?: string;
+  /** present when the review was opened from a finished job */
+  onClose?: () => void;
   onRenderQueued: () => void;
 }) {
   const [review, setReview] = useState<Review | null>(null);
@@ -250,14 +255,13 @@ export function TimelineReview({
   const [style, setStyle] = useState<SubtitleStyle>(DEFAULT_SUBTITLE_STYLE);
   const [styleDirty, setStyleDirty] = useState(false);
   const [styleOpen, setStyleOpen] = useState(false);
-  // null follows the window size; a person's own choice overrides it
-  const [expanded, setExpanded] = useState<boolean | null>(null);
   const canExpand = useSyncExternalStore(
     subscribeToWorkbenchQuery,
     () => window.matchMedia(WORKBENCH_QUERY).matches,
     () => false,
   );
-  const wide = (expanded ?? canExpand) && review !== null;
+  // Side by side whenever the window has room; one column otherwise.
+  const wide = canExpand && review !== null;
   const listRef = useRef<HTMLOListElement | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<ErrorFeedback | null>(null);
@@ -567,12 +571,6 @@ export function TimelineReview({
       input?.focus();
       input?.select();
     });
-  };
-
-  // The player is rebuilt in the other layout; it picks up where it was.
-  const toggleWorkbench = (next: boolean) => {
-    resumeAtRef.current = mediaRef.current?.currentTime ?? 0;
-    setExpanded(next);
   };
 
   const mediaProps = {
@@ -1066,13 +1064,13 @@ export function TimelineReview({
     // mounted on the body so no ancestor can confine a fixed element.
     return createPortal(
       <section
-        className="fixed inset-0 z-40 flex flex-col bg-background"
+        className={`fixed inset-x-0 bottom-0 ${BELOW_HEADER} z-40 flex flex-col bg-background`}
         aria-labelledby="review-panel-heading"
       >
-        <div className="flex items-center gap-4 border-b bg-card px-5 py-2.5">
+        <div className={`${PAGE_WIDTH} flex items-center gap-4 border-b py-2.5`}>
           {heading}
-          <p className="hidden min-w-0 flex-1 truncate text-xs text-muted-foreground 2xl:block">
-            {REVIEW_COPY.description}
+          <p className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
+            {title}
           </p>
           <div className="ml-auto flex items-center gap-2">
             <button
@@ -1088,19 +1086,22 @@ export function TimelineReview({
               <Palette className="size-4" />
               {REVIEW_COPY.styleTitle}
             </button>
-            <button
-              type="button"
-              onClick={() => toggleWorkbench(false)}
-              title={REVIEW_COPY.workbenchExitHint}
-              className="focus-ring inline-flex items-center gap-1.5 rounded-lg border bg-card px-3 py-1.5 text-sm font-semibold transition hover:bg-muted"
-            >
-              <Minimize2 className="size-4" />
-              {REVIEW_COPY.workbenchExit}
-            </button>
+            {onClose && (
+              <button
+                type="button"
+                onClick={onClose}
+                className="focus-ring inline-flex items-center gap-1.5 rounded-lg border bg-card px-3 py-1.5 text-sm font-semibold transition hover:bg-muted"
+              >
+                <X className="size-4" />
+                {REVIEW_COPY.close}
+              </button>
+            )}
           </div>
         </div>
 
-        <div className="relative grid min-h-0 flex-1 grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] gap-5 px-5 py-4">
+        <div
+          className={`${PAGE_WIDTH} relative grid min-h-0 flex-1 grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] gap-6 py-4`}
+        >
           <div className="flex min-h-0 flex-col gap-3">
             {trackSwitch}
             {media}
@@ -1149,14 +1150,6 @@ export function TimelineReview({
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         {heading}
-        <button
-          type="button"
-          onClick={() => toggleWorkbench(true)}
-          className="focus-ring inline-flex items-center gap-1.5 rounded-lg border bg-card px-3 py-1.5 text-sm font-semibold transition hover:bg-muted"
-        >
-          <Maximize2 className="size-4" />
-          {REVIEW_COPY.workbenchEnter}
-        </button>
       </div>
       <p className="mt-2 text-sm text-muted-foreground">
         {REVIEW_COPY.description}

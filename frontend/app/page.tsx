@@ -1,9 +1,10 @@
 import { HomeWorkspace } from "@/components/home-workspace";
+import { PAGE_WIDTH } from "@/lib/layout";
 import { HOME_COPY } from "@/lib/ui-copy";
 
 export default function Home() {
   return (
-    <main className="mx-auto max-w-6xl px-5 py-8 sm:px-8 sm:py-10">
+    <main className={`${PAGE_WIDTH} py-8`}>
       <HomeWorkspace />
 
       <footer className="mt-10 flex justify-center border-t pt-5">

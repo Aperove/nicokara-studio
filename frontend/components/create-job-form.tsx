@@ -146,6 +146,8 @@ export function CreateJobForm({ allowLinks = true }: { allowLinks?: boolean }) {
 
   return (
     <form onSubmit={submit} className="space-y-6">
+      {/* wide: material and options on the left, the lyrics beside them */}
+      <div className="grid gap-6 xl:grid-cols-2 xl:gap-x-8">
       <section aria-labelledby="source-heading">
         <h2 id="source-heading" className="mb-2.5 text-sm font-semibold">
           {CREATE_COPY.sourceTitle}
@@ -232,7 +234,10 @@ export function CreateJobForm({ allowLinks = true }: { allowLinks?: boolean }) {
         )}
       </section>
 
-      <section aria-labelledby="lyrics-heading">
+      <section
+        aria-labelledby="lyrics-heading"
+        className="flex flex-col xl:col-start-2 xl:row-span-2 xl:row-start-1"
+      >
         <h2 id="lyrics-heading" className="mb-2.5 text-sm font-semibold">
           {UPLOAD_COPY.lyricsSectionTitle}
         </h2>
@@ -242,7 +247,7 @@ export function CreateJobForm({ allowLinks = true }: { allowLinks?: boolean }) {
           onChange={(event) => setLyricsText(event.target.value)}
           rows={9}
           placeholder={CREATE_COPY.lyricsPlaceholder}
-          className="focus-ring w-full resize-y rounded-xl border bg-card px-4 py-3 text-sm leading-7 placeholder:text-muted-foreground/60 disabled:cursor-not-allowed disabled:bg-muted"
+          className="focus-ring w-full resize-y rounded-xl border bg-card px-4 py-3 text-sm leading-7 placeholder:text-muted-foreground/60 disabled:cursor-not-allowed disabled:bg-muted xl:min-h-[26rem] xl:flex-1"
         />
         <div className="mt-2 flex flex-wrap items-center gap-3">
           <input
@@ -341,6 +346,7 @@ export function CreateJobForm({ allowLinks = true }: { allowLinks?: boolean }) {
           )}
         </div>
       </section>
+      </div>
 
       {error && <ErrorFeedbackPanel feedback={error} />}
 

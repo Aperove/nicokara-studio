@@ -31,8 +31,8 @@ export function HomeWorkspace() {
     <div
       className={
         capabilities.job_listing
-          ? "grid gap-8 lg:grid-cols-[minmax(0,1fr)_21rem] lg:items-start"
-          : "mx-auto max-w-3xl"
+          ? "grid gap-8 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start"
+          : ""
       }
     >
       <section

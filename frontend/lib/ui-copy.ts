@@ -109,7 +109,7 @@ export const REVIEW_COPY = {
   description:
     "播放原视频，对照实时变色预览检查每一句。发现不准的句子，可以在波形时间轴上直接拖动，也可以改起止时间或边听边打点。",
   openFromCompleted: "核对并修正时间轴",
-  close: "收起核对界面",
+  close: "返回结果",
   loading: "正在读取时间轴…",
   sourceVideo: "原视频",
   vocalsOnly: "仅人声",
@@ -138,9 +138,6 @@ export const REVIEW_COPY = {
   refining: "AI 对齐中，约需一分钟…",
   refineHint:
     "只需把句子的起止范围大致标对，AI 会在这个范围里重新精确到每个词。",
-  workbenchEnter: "展开工作台",
-  workbenchExit: "退出工作台",
-  workbenchExitHint: "回到任务页里的单列视图",
   styleTitle: "字幕样式",
   styleHint: "上方的预览会按这里的设置实时变化；样式在点“确认并合成视频”时一并保存。",
   styleOpen: "调整样式",
