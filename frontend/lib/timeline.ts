@@ -147,3 +147,16 @@ export function waveformPeaks(
   }
   return peaks;
 }
+
+const KANA_ONLY = /^[\u3041-\u3096\u30a1-\u30faーゝゞヽヾ・\s]+$/;
+
+/** A reading is written in kana only (mirrors the API's check). */
+export function isKanaReading(text: string): boolean {
+  const trimmed = text.trim();
+  return trimmed.length > 0 && trimmed.length <= 64 && KANA_ONLY.test(trimmed);
+}
+
+/** Tokens whose reading a person may want to check: anything not plain kana. */
+export function hasCheckableReading(surface: string, reading: string): boolean {
+  return reading.length > 0 && !isKanaReading(surface);
+}

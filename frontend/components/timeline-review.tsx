@@ -2,6 +2,7 @@
 
 import {
   AlertTriangle,
+  BookOpenText,
   Clapperboard,
   LoaderCircle,
   Play,
@@ -20,6 +21,8 @@ import {
 import {
   activeLineIndex,
   formatSeconds,
+  hasCheckableReading,
+  isKanaReading,
   lineConcerns,
   parseTime,
   retimeLine,
@@ -33,6 +36,7 @@ import {
   getReview,
   refineTimelineLines,
   renderJob,
+  saveReadings,
   saveTimeline,
   sourceVideoUrl,
 } from "@/services/api";
@@ -140,6 +144,11 @@ export function TimelineReview({
   const [track, setTrack] = useState<"video" | "vocals">("video");
   const [timeMs, setTimeMs] = useState(0);
   const [concernsOnly, setConcernsOnly] = useState(false);
+  const [openReadings, setOpenReadings] = useState<number | null>(null);
+  // corrected readings not saved yet, keyed "line:token"
+  const [readingDrafts, setReadingDrafts] = useState<Record<string, string>>({});
+  // lines whose reading changed since they were last re-aligned
+  const [rereadLines, setRereadLines] = useState<number[]>([]);
   const [busy, setBusy] = useState<Busy>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<ErrorFeedback | null>(null);
@@ -207,16 +216,24 @@ export function TimelineReview({
   const invalidIndexes = dirtyIndexes.filter(
     (index) => drafts[index].end_ms <= drafts[index].start_ms,
   );
+  const readingKeys = Object.keys(readingDrafts);
+  const invalidReadings = readingKeys.filter(
+    (key) => !isKanaReading(readingDrafts[key]),
+  );
+  const unsavedCount = dirtyIndexes.length + readingKeys.length;
+  const blocked = invalidIndexes.length > 0 || invalidReadings.length > 0;
   const pace = useMemo(() => typicalPace(lines), [lines]);
   const movedLines = review?.moved_lines ?? [];
   const stuckLines = review?.unresolved_lines ?? [];
+  const lrcLines = review?.lrc_adjusted_lines ?? [];
   const concernCount = useMemo(
     () =>
       lines.filter(
         (line, index) =>
           lineConcerns(line, pace).length > 0 ||
           (review?.moved_lines ?? []).includes(index) ||
-          (review?.unresolved_lines ?? []).includes(index),
+          (review?.unresolved_lines ?? []).includes(index) ||
+          (review?.lrc_adjusted_lines ?? []).includes(index),
       ).length,
     [lines, pace, review],
   );
@@ -264,8 +281,24 @@ export function TimelineReview({
     setTrack(next);
   }
 
-  async function persist(): Promise<boolean> {
-    if (!dirtyIndexes.length) return true;
+  async function persist(): Promise<number[]> {
+    let reread = rereadLines;
+    if (readingKeys.length) {
+      const saved = await saveReadings(
+        jobId,
+        readingKeys.map((key) => {
+          const [line, token] = key.split(":").map(Number);
+          return { line, token, reading: readingDrafts[key].trim() };
+        }),
+      );
+      setReview((previous) =>
+        previous ? { ...previous, timeline: saved.timeline } : previous,
+      );
+      setReadingDrafts({});
+      reread = [...new Set([...reread, ...saved.changed_lines])];
+      setRereadLines(reread);
+    }
+    if (!dirtyIndexes.length) return reread;
     const result = await saveTimeline(
       jobId,
       dirtyIndexes.map((index) => ({ index, ...drafts[index] })),
@@ -274,22 +307,24 @@ export function TimelineReview({
       previous ? { ...previous, timeline: result.timeline } : previous,
     );
     setDrafts({});
-    return true;
+    return reread;
   }
 
   async function run(kind: Exclude<Busy, null>) {
-    if (invalidIndexes.length) return;
+    if (blocked) return;
     setBusy(kind);
     setError(null);
     setNotice(null);
     try {
-      const targets = dirtyIndexes;
-      await persist();
+      const moved = dirtyIndexes;
+      const reread = await persist();
+      const targets = [...new Set([...moved, ...reread])].sort((a, b) => a - b);
       if (kind === "refine" && targets.length) {
         const result = await refineTimelineLines(jobId, targets);
         setReview((previous) =>
           previous ? { ...previous, timeline: result.timeline } : previous,
         );
+        setRereadLines([]);
         setNotice(
           REVIEW_COPY.refinedResult(result.refined_lines.length, targets.length),
         );
@@ -438,13 +473,27 @@ export function TimelineReview({
         </label>
       </div>
 
+      {review.lyrics_provider === "local" && review.can_edit_readings && (
+        <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          {REVIEW_COPY.readingsLocalWarning}
+        </p>
+      )}
+
       <ol className="mt-3 space-y-1.5">
         {lines.map((line, index) => {
           const concerns = lineConcerns(line, pace);
           const draft = drafts[index];
           const wasMoved = movedLines.includes(index);
           const isStuck = stuckLines.includes(index);
-          if (concernsOnly && !concerns.length && !draft && !wasMoved && !isStuck)
+          const byLrc = lrcLines.includes(index);
+          if (
+            concernsOnly &&
+            !concerns.length &&
+            !draft &&
+            !wasMoved &&
+            !isStuck &&
+            !byLrc
+          )
             return null;
           const invalid = invalidIndexes.includes(index);
           const startMs = draft?.start_ms ?? line.start_ms;
@@ -492,6 +541,11 @@ export function TimelineReview({
                     {REVIEW_COPY.stuckInRest}
                   </span>
                 )}
+                {byLrc && (
+                  <span className="rounded bg-sky-100 px-1.5 py-0.5 text-xs text-sky-800">
+                    {REVIEW_COPY.lrcAdjusted}
+                  </span>
+                )}
                 {wasMoved && (
                   <span className="rounded bg-sky-100 px-1.5 py-0.5 text-xs text-sky-800">
                     {REVIEW_COPY.movedOutOfRest}
@@ -501,6 +555,26 @@ export function TimelineReview({
                   <span className="rounded bg-primary/10 px-1.5 py-0.5 text-xs text-primary">
                     {REVIEW_COPY.edited}
                   </span>
+                )}
+                {review.can_edit_readings && (
+                  <button
+                    type="button"
+                    aria-expanded={openReadings === index}
+                    title={REVIEW_COPY.readingsTitle}
+                    aria-label={`${REVIEW_COPY.readings} ${index + 1}`}
+                    onClick={() =>
+                      setOpenReadings((open) => (open === index ? null : index))
+                    }
+                    className={`focus-ring inline-flex items-center gap-1 rounded border px-1.5 py-1 text-xs font-medium transition ${
+                      openReadings === index ||
+                      readingKeys.some((key) => key.startsWith(`${index}:`))
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "bg-card text-muted-foreground hover:bg-muted"
+                    }`}
+                  >
+                    <BookOpenText className="size-3.5" />
+                    {REVIEW_COPY.readings}
+                  </button>
                 )}
                 <div className="flex items-center gap-1.5 text-xs">
                   {(
@@ -557,6 +631,59 @@ export function TimelineReview({
                   {REVIEW_COPY.invalidRange}
                 </p>
               )}
+              {openReadings === index && (
+                <div className="mt-2 border-t pt-2">
+                  <div className="flex flex-wrap gap-2">
+                    {line.tokens.map((token, tokenIndex) => {
+                      if (!hasCheckableReading(token.surface, token.reading)) {
+                        return null;
+                      }
+                      const key = `${index}:${tokenIndex}`;
+                      const value = readingDrafts[key] ?? token.reading;
+                      const bad = key in readingDrafts && !isKanaReading(value);
+                      return (
+                        <label
+                          key={key}
+                          className="flex items-center gap-1.5 rounded-lg border bg-card px-2 py-1 text-sm"
+                        >
+                          <span className="font-medium">{token.surface}</span>
+                          <input
+                            type="text"
+                            value={value}
+                            maxLength={64}
+                            aria-invalid={bad}
+                            aria-label={`${token.surface} ${REVIEW_COPY.readings}`}
+                            title={bad ? REVIEW_COPY.readingInvalid : undefined}
+                            onChange={(event) => {
+                              const next = event.target.value;
+                              setNotice(null);
+                              setReadingDrafts((previous) => {
+                                const copy = { ...previous };
+                                if (next === token.reading) delete copy[key];
+                                else copy[key] = next;
+                                return copy;
+                              });
+                            }}
+                            className={`focus-ring w-28 rounded border bg-card px-1.5 py-0.5 text-sm ${
+                              bad ? "border-destructive" : ""
+                            }`}
+                          />
+                        </label>
+                      );
+                    })}
+                    {!line.tokens.some((token) =>
+                      hasCheckableReading(token.surface, token.reading),
+                    ) && (
+                      <span className="text-xs text-muted-foreground">
+                        {REVIEW_COPY.readingsNone}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {REVIEW_COPY.readingsHint}
+                  </p>
+                </div>
+              )}
             </li>
           );
         })}
@@ -572,7 +699,7 @@ export function TimelineReview({
         <div className="flex flex-wrap items-center gap-3">
           <button
             type="button"
-            disabled={busy !== null || !dirtyIndexes.length || invalidIndexes.length > 0}
+            disabled={busy !== null || blocked || !unsavedCount}
             onClick={() => run("save")}
             className="focus-ring inline-flex items-center gap-2 rounded-lg border bg-card px-4 py-2.5 text-sm font-semibold transition hover:bg-muted disabled:opacity-50"
           >
@@ -582,7 +709,7 @@ export function TimelineReview({
           {review.can_refine && (
             <button
               type="button"
-              disabled={busy !== null || !dirtyIndexes.length || invalidIndexes.length > 0}
+              disabled={busy !== null || blocked || (!unsavedCount && !rereadLines.length)}
               onClick={() => run("refine")}
               title={REVIEW_COPY.refineHint}
               className="focus-ring inline-flex items-center gap-2 rounded-lg border bg-card px-4 py-2.5 text-sm font-semibold transition hover:bg-muted disabled:opacity-50"
@@ -597,16 +724,16 @@ export function TimelineReview({
           )}
           <button
             type="button"
-            disabled={busy !== null || invalidIndexes.length > 0}
+            disabled={busy !== null || blocked}
             onClick={() => run("render")}
             className="focus-ring inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition hover:brightness-95 disabled:cursor-wait disabled:opacity-60"
           >
             <Clapperboard className="size-4" />
             {busy === "render" ? REVIEW_COPY.rendering : REVIEW_COPY.render}
           </button>
-          {dirtyIndexes.length > 0 && (
+          {unsavedCount > 0 && (
             <span className="text-xs text-muted-foreground">
-              {REVIEW_COPY.unsavedCount(dirtyIndexes.length)}
+              {REVIEW_COPY.unsavedCount(unsavedCount)}
             </span>
           )}
         </div>

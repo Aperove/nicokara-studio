@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
 from fastapi import HTTPException, UploadFile, status
 
+from app.lyrics.lrc import parse_lyrics
+
 
 CHUNK_SIZE = 1024 * 1024
+# Line start times taken from LRC input, kept next to lyrics.txt.
+LRC_STARTS_FILE = "lyrics_lrc.json"
 
 
 @dataclass(frozen=True)
@@ -109,5 +114,14 @@ async def save_lyrics(
             status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail="歌词文本超过大小限制",
         )
-    destination.write_text(text + "\n", encoding="utf-8")
+    parsed = parse_lyrics(text)
+    destination.write_text(parsed.text.strip() + "\n", encoding="utf-8")
+    starts_path = destination.with_name(LRC_STARTS_FILE)
+    if parsed.line_starts_ms is not None:
+        starts_path.write_text(
+            json.dumps({"line_starts_ms": parsed.line_starts_ms}) + "\n",
+            encoding="utf-8",
+        )
+    else:
+        starts_path.unlink(missing_ok=True)
     return source

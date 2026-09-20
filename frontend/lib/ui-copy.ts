@@ -127,12 +127,13 @@ export const REVIEW_COPY = {
   concernOddPace: "语速异常",
   movedOutOfRest: "AI 从间奏里挪出",
   stuckInRest: "落在间奏里",
+  lrcAdjusted: "按 LRC 调整过",
   restLabel: "间奏",
   edited: "已修改",
   concernSummary: (count: number) =>
     count ? `有 ${count} 句建议重点核对` : "没有发现明显可疑的句子",
   showConcernsOnly: "只看可疑的句子",
-  unsavedCount: (count: number) => `${count} 句未保存`,
+  unsavedCount: (count: number) => `${count} 处修改未保存`,
   save: "保存修改",
   saving: "正在保存…",
   refine: "用 AI 重新对齐已修改的句子",
@@ -146,6 +147,14 @@ export const REVIEW_COPY = {
   render: "确认并合成视频",
   rendering: "正在提交…",
   invalidRange: "终点必须晚于起点",
+  readings: "读音",
+  readingsTitle: "检查并修改这一句的假名读音",
+  readingsHint:
+    "读音错了，屏幕上的注音和句内的变色节奏都会跟着错。改完保存后，可以再让 AI 重新对齐这一句。",
+  readingsLocalWarning:
+    "这首歌的读音由本机词典生成，多音字容易读错，建议把带汉字的词过一遍。",
+  readingInvalid: "读音只能填假名",
+  readingsNone: "这一句没有需要检查读音的词",
   invalidTime: "时间格式应为 分:秒，例如 1:29.08",
   trackLine: "时间轴上的句子",
   trackHint:
@@ -166,7 +175,7 @@ export const CREATE_COPY = {
   linkHelp:
     "目前支持 YouTube 链接。视频会由本机下载到任务目录，下载完成后自动开始处理。",
   linkRights: "请只下载你有权使用的视频。",
-  lyricsPlaceholder: "在这里粘贴日语歌词，每句单独一行",
+  lyricsPlaceholder: "在这里粘贴日语歌词，每句单独一行；也可以直接粘贴带时间标签的 LRC",
   optionsTitle: "选项",
   bothVersions:
     "会同时生成 ON VOCAL（原唱）和 OFF VOCAL（伴奏）两个版本，画面只渲染一次。",

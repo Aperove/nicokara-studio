@@ -4,6 +4,8 @@ import { jobPresentation } from "./job-presentation";
 import {
   activeLineIndex,
   formatSeconds,
+  hasCheckableReading,
+  isKanaReading,
   lineConcerns,
   parseTime,
   retimeLine,
@@ -114,6 +116,24 @@ describe("timeline review helpers", () => {
       ["short", "odd_pace"],
       ["odd_pace"],
     ]);
+  });
+
+  it("accepts only kana as a reading", () => {
+    expect(isKanaReading("こんにち")).toBe(true);
+    expect(isKanaReading("コーヒー")).toBe(true);
+    expect(isKanaReading(" こん にち ")).toBe(true);
+    expect(isKanaReading("")).toBe(false);
+    expect(isKanaReading("kyou")).toBe(false);
+    expect(isKanaReading("今日")).toBe(false);
+    expect(isKanaReading("あ".repeat(65))).toBe(false);
+  });
+
+  it("offers readings for checking only where the text is not plain kana", () => {
+    expect(hasCheckableReading("今日", "きょう")).toBe(true);
+    expect(hasCheckableReading("晴れ", "はれ")).toBe(true);
+    expect(hasCheckableReading("ABC", "えーびーしー")).toBe(true);
+    expect(hasCheckableReading("は", "は")).toBe(false);
+    expect(hasCheckableReading("、", "")).toBe(false);
   });
 
   it("formats playhead positions", () => {

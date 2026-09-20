@@ -18,6 +18,7 @@ from app.alignment.refiner import realign_lines
 from app.core.config import Settings
 from app.core.database import Database
 from app.lyrics.models import LyricDocument
+from app.lyrics.readings import ReadingEditError, apply_reading_edits
 from app.schemas.jobs import JobResponse
 from app.services.uploads import save_lyrics, save_mp4
 from app.subtitle.style import SubtitleStyle
@@ -53,6 +54,16 @@ class LineEdit(BaseModel):
 
 class TimelineEdits(BaseModel):
     lines: list[LineEdit] = Field(max_length=2000)
+
+
+class ReadingEdit(BaseModel):
+    line: int = Field(ge=0)
+    token: int = Field(ge=0)
+    reading: str = Field(min_length=1, max_length=64)
+
+
+class ReadingEdits(BaseModel):
+    edits: list[ReadingEdit] = Field(min_length=1, max_length=500)
 
 
 class RefineRequest(BaseModel):
@@ -428,9 +439,19 @@ def get_review(request: Request, job_id: str) -> dict:
         if notes_path.is_file()
         else {}
     )
+    lyrics_path = job_dir / "lyrics_processed.json"
+    lyrics_info = (
+        json.loads(lyrics_path.read_text(encoding="utf-8"))
+        if lyrics_path.is_file()
+        else {}
+    )
     return {
+        # "local" readings come from a dictionary and are wrong more often
+        "lyrics_provider": lyrics_info.get("provider"),
+        "can_edit_readings": lyrics_path.is_file(),
         "rests": notes.get("rests", []),
         "moved_lines": notes.get("moved_lines", []),
+        "lrc_adjusted_lines": notes.get("lrc_adjusted_lines", []),
         "timeline": read_timeline(job_dir).to_dict(),
         "duration_ms": song_duration_ms(job_dir),
         "has_vocals": (job_dir / AUDIO_TRACKS["vocals"]).is_file()
@@ -455,6 +476,43 @@ def update_timeline(request: Request, job_id: str, edits: TimelineEdits) -> dict
             detail=f"时间轴无效：{exc}",
         ) from exc
     return {"timeline": write_timeline(job_dir, timeline)}
+
+
+@router.put("/{job_id}/readings")
+def update_readings(request: Request, job_id: str, body: ReadingEdits) -> dict:
+    """Correct the kana readings of lyric tokens."""
+    _, job_dir = reviewable_job(request, job_id)
+    lyrics_path = job_dir / "lyrics_processed.json"
+    if not lyrics_path.is_file():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="这个任务没有可修改的读音数据",
+        )
+    lyrics = LyricDocument.from_dict(
+        json.loads(lyrics_path.read_text(encoding="utf-8"))
+    )
+    try:
+        lyrics, timeline, changed = apply_reading_edits(
+            lyrics,
+            read_timeline(job_dir),
+            {(edit.line, edit.token): edit.reading for edit in body.edits},
+        )
+    except ReadingEditError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"读音无效：{exc}",
+        ) from exc
+    if changed:
+        lyrics_path.write_text(
+            json.dumps(lyrics.to_dict(), ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+    return {
+        "timeline": write_timeline(job_dir, timeline)
+        if changed
+        else timeline.to_dict(),
+        "changed_lines": changed,
+    }
 
 
 @router.post("/{job_id}/timeline/refine")

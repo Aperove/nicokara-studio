@@ -3,11 +3,12 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 from app.ai.whisper import TranscriptDocument
-from app.alignment.editing import MANUALLY_EDITED, trim_overlaps
+from app.alignment.editing import MANUALLY_EDITED, retime_line, trim_overlaps
 from app.alignment.models import LyricTimeline
 from app.alignment.refiner import realign_lines
 from app.alignment.voice_activity import detect_rests, move_lines_out_of_rests
@@ -336,11 +337,14 @@ class TranscriptionPipeline:
         the result goes through the same aligner.  Refinement is strictly
         optional: any failure keeps the ASR-based timeline.
         """
-        return self._respect_rests(
+        timeline = self._respect_rests(
             job_dir,
             lyrics,
             self._refined_timeline(job_dir, lyrics, transcript),
             transcript.duration_seconds,
+        )
+        return self._respect_lrc(
+            job_dir, lyrics, timeline, transcript.duration_seconds
         )
 
     def _refined_timeline(
@@ -379,6 +383,85 @@ class TranscriptionPipeline:
         return refined
 
     _NOTES_FILE = "alignment_notes.json"
+    _LRC_STARTS_FILE = "lyrics_lrc.json"
+    # LRC files are line-level and usually a little early, so they only
+    # overrule the aligner when it is off by more than this.
+    _LRC_TOLERANCE_MS = 2_000
+
+    def _respect_lrc(
+        self,
+        job_dir: Path,
+        lyrics: Any,
+        timeline: Any,
+        duration_seconds: float,
+    ) -> Any:
+        """Use LRC line times as a guard against grossly misplaced lines."""
+        starts_path = job_dir / self._LRC_STARTS_FILE
+        if not starts_path.is_file():
+            return timeline
+        try:
+            starts = json.loads(starts_path.read_text(encoding="utf-8"))[
+                "line_starts_ms"
+            ]
+        except (ValueError, KeyError):
+            return timeline
+        lines = list(timeline.lines)
+        if len(starts) != len(lines):
+            logger.warning(
+                "LRC has %d timed lines but the lyrics have %d; ignoring it",
+                len(starts),
+                len(lines),
+            )
+            return timeline
+
+        adjusted: list[int] = []
+        for index, lrc_start in enumerate(starts):
+            line = lines[index]
+            if abs(line.start_ms - lrc_start) <= self._LRC_TOLERANCE_MS:
+                continue
+            ceiling = (
+                starts[index + 1]
+                if index + 1 < len(starts)
+                else round(duration_seconds * 1000)
+            )
+            length = max(500, line.end_ms - line.start_ms)
+            end_ms = max(lrc_start + 1, min(lrc_start + length, ceiling))
+            lines[index] = retime_line(line, lrc_start, end_ms)
+            adjusted.append(index)
+        if not adjusted:
+            return timeline
+
+        repaired = replace(timeline, lines=lines)
+        forced = self.primary_aligner or self.alignment_refiner
+        if forced is not None:
+            vocals_path = job_dir / "audio_vocals.wav"
+            try:
+                repaired, _ = realign_lines(
+                    self.aligner,
+                    forced,
+                    lyrics,
+                    repaired,
+                    adjusted,
+                    vocals_path if vocals_path.is_file() else job_dir / "audio.wav",
+                    duration_seconds=duration_seconds,
+                    work_dir=job_dir,
+                )
+            except Exception:
+                logger.warning(
+                    "Could not re-align the lines moved to their LRC time",
+                    exc_info=True,
+                )
+        repaired = trim_overlaps(repaired)
+
+        notes_path = job_dir / self._NOTES_FILE
+        notes = (
+            json.loads(notes_path.read_text(encoding="utf-8"))
+            if notes_path.is_file()
+            else {}
+        )
+        notes["lrc_adjusted_lines"] = adjusted
+        notes_path.write_text(json.dumps(notes) + "\n", encoding="utf-8")
+        return repaired
 
     def _respect_rests(
         self,

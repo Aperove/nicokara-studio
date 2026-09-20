@@ -1,6 +1,11 @@
 import type { Job } from "@/types/job";
 import type { SubtitleStyle } from "@/types/style";
-import type { LineEdit, Review, Timeline } from "@/types/timeline";
+import type {
+  LineEdit,
+  ReadingEdit,
+  Review,
+  Timeline,
+} from "@/types/timeline";
 import {
   httpErrorFeedback,
   networkErrorFeedback,
@@ -203,6 +208,20 @@ export function saveTimeline(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ lines }),
   });
+}
+
+export function saveReadings(
+  jobId: string,
+  edits: ReadingEdit[],
+): Promise<{ timeline: Timeline; changed_lines: number[] }> {
+  return jsonRequest<{ timeline: Timeline; changed_lines: number[] }>(
+    `/jobs/${jobId}/readings`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ edits }),
+    },
+  );
 }
 
 export function refineTimelineLines(
