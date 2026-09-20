@@ -221,7 +221,7 @@ function KaraokePreview({
 }
 
 // Wide enough for the player and the lyric list to sit side by side.
-const WORKBENCH_QUERY = "(min-width: 1280px) and (min-height: 640px)";
+const WORKBENCH_QUERY = "(min-width: 1000px) and (min-height: 480px)";
 
 function subscribeToWorkbenchQuery(onChange: () => void) {
   const query = window.matchMedia(WORKBENCH_QUERY);
