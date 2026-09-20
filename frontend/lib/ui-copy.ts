@@ -138,6 +138,9 @@ export const REVIEW_COPY = {
   refining: "AI 对齐中，约需一分钟…",
   refineHint:
     "只需把句子的起止范围大致标对，AI 会在这个范围里重新精确到每个词。",
+  workbenchEnter: "展开工作台",
+  workbenchExit: "退出工作台",
+  workbenchExitHint: "回到任务页里的单列视图",
   styleTitle: "字幕样式",
   styleHint: "上方的预览会按这里的设置实时变化；样式在点“确认并合成视频”时一并保存。",
   styleOpen: "调整样式",

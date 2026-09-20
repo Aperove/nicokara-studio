@@ -5,10 +5,14 @@ import {
   BookOpenText,
   Clapperboard,
   LoaderCircle,
+  Maximize2,
+  Minimize2,
+  Palette,
   Play,
   RotateCcw,
   Save,
   Sparkles,
+  X,
 } from "lucide-react";
 import {
   useCallback,
@@ -17,7 +21,9 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
+import { createPortal } from "react-dom";
 
 import { ErrorFeedbackPanel } from "@/components/error-feedback";
 import { TimelineTrack } from "@/components/timeline-track";
@@ -214,6 +220,15 @@ function KaraokePreview({
   );
 }
 
+// Wide enough for the player and the lyric list to sit side by side.
+const WORKBENCH_QUERY = "(min-width: 1280px) and (min-height: 640px)";
+
+function subscribeToWorkbenchQuery(onChange: () => void) {
+  const query = window.matchMedia(WORKBENCH_QUERY);
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+}
+
 export function TimelineReview({
   jobId,
   onRenderQueued,
@@ -235,6 +250,14 @@ export function TimelineReview({
   const [style, setStyle] = useState<SubtitleStyle>(DEFAULT_SUBTITLE_STYLE);
   const [styleDirty, setStyleDirty] = useState(false);
   const [styleOpen, setStyleOpen] = useState(false);
+  const [expanded, setExpanded] = useState(true);
+  const canExpand = useSyncExternalStore(
+    subscribeToWorkbenchQuery,
+    () => window.matchMedia(WORKBENCH_QUERY).matches,
+    () => false,
+  );
+  const wide = expanded && canExpand && review !== null;
+  const listRef = useRef<HTMLOListElement | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<ErrorFeedback | null>(null);
   const mediaRef = useRef<HTMLMediaElement | null>(null);
@@ -330,6 +353,24 @@ export function TimelineReview({
     [lines, pace, review],
   );
   const current = lines.length ? activeLineIndex(lines, timeMs) : -1;
+
+  // The workbench covers the page, which must not scroll behind it.
+  useEffect(() => {
+    if (!wide) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [wide]);
+
+  // Keep the line being sung in view while the list scrolls on its own.
+  useEffect(() => {
+    if (!wide || current < 0) return;
+    listRef.current
+      ?.querySelector(`[data-line="${current}"]`)
+      ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [wide, current]);
 
   const setDraft = useCallback(
     (index: number, patch: Partial<Draft>) => {
@@ -469,6 +510,12 @@ export function TimelineReview({
     );
   }
 
+  // The player is rebuilt in the other layout; it picks up where it was.
+  const toggleWorkbench = (next: boolean) => {
+    resumeAtRef.current = mediaRef.current?.currentTime ?? 0;
+    setExpanded(next);
+  };
+
   const mediaProps = {
     controls: true,
     preload: "metadata" as const,
@@ -477,146 +524,132 @@ export function TimelineReview({
     },
   };
 
-  return (
-    <section
-      className="rounded-3xl border bg-card p-6 sm:p-9"
-      aria-labelledby="review-panel-heading"
-    >
-      <h2
-        id="review-panel-heading"
-        className="flex items-center gap-2 font-display text-xl font-bold"
-      >
-        <Clapperboard className="size-5 text-primary" />
-        {REVIEW_COPY.heading}
-      </h2>
-      <p className="mt-2 text-sm text-muted-foreground">
-        {REVIEW_COPY.description}
-      </p>
+  const trackSwitch = (
+    <div className="flex gap-2 text-sm">
+      {(
+        [
+          ["video", REVIEW_COPY.sourceVideo],
+          ["vocals", REVIEW_COPY.vocalsOnly],
+        ] as const
+      ).map(([value, label]) =>
+        value === "vocals" && !review.has_vocals ? null : (
+          <button
+            key={value}
+            type="button"
+            aria-pressed={track === value}
+            onClick={() => switchTrack(value)}
+            className={`focus-ring rounded-lg border px-3 py-1.5 font-medium transition ${
+              track === value
+                ? "border-primary bg-primary/10 text-primary"
+                : "bg-card text-muted-foreground hover:bg-muted"
+            }`}
+          >
+            {label}
+          </button>
+        ),
+      )}
+      <span className="ml-auto self-center font-mono text-xs text-muted-foreground">
+        {formatSeconds(timeMs)}
+      </span>
+    </div>
+  );
 
-      <div className="sticky top-0 z-10 -mx-2 mt-5 space-y-3 bg-card px-2 pb-3 pt-1">
-        <div className="flex gap-2 text-sm">
-          {(
-            [
-              ["video", REVIEW_COPY.sourceVideo],
-              ["vocals", REVIEW_COPY.vocalsOnly],
-            ] as const
-          ).map(([value, label]) =>
-            value === "vocals" && !review.has_vocals ? null : (
-              <button
-                key={value}
-                type="button"
-                aria-pressed={track === value}
-                onClick={() => switchTrack(value)}
-                className={`focus-ring rounded-lg border px-3 py-1.5 font-medium transition ${
-                  track === value
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "bg-card text-muted-foreground hover:bg-muted"
-                }`}
-              >
-                {label}
-              </button>
-            ),
-          )}
-          <span className="ml-auto self-center font-mono text-xs text-muted-foreground">
-            {formatSeconds(timeMs)}
-          </span>
-        </div>
-        {track === "video" ? (
-          <video
-            key="video"
-            ref={(element) => {
-              mediaRef.current = element;
-            }}
-            className="max-h-56 w-full rounded-xl bg-black"
-            playsInline
-            src={sourceVideoUrl(jobId)}
-            {...mediaProps}
-          />
-        ) : (
-          <audio
-            key="vocals"
-            ref={(element) => {
-              mediaRef.current = element;
-            }}
-            className="w-full"
-            src={audioTrackUrl(jobId, "vocals")}
-            {...mediaProps}
-          />
-        )}
-        <KaraokePreview
-          line={current >= 0 ? lines[current] : null}
-          timeMs={timeMs}
-          style={style}
-        />
-        <div className="rounded-xl border bg-card/60 px-3 py-2">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm font-semibold">{REVIEW_COPY.styleTitle}</p>
-            <button
-              type="button"
-              aria-expanded={styleOpen}
-              onClick={() => setStyleOpen((open) => !open)}
-              className="focus-ring rounded-lg border bg-card px-3 py-1.5 text-xs font-semibold transition hover:bg-muted"
-            >
-              {styleOpen ? REVIEW_COPY.styleClose : REVIEW_COPY.styleOpen}
-            </button>
-          </div>
-          {styleOpen && (
-            <div className="mt-3 space-y-3">
-              <p className="text-xs text-muted-foreground">
-                {REVIEW_COPY.styleHint}
-              </p>
-              <StylePanel
-                value={style}
-                onChange={(next) => {
-                  setStyle(next);
-                  setStyleDirty(true);
+  const media =
+    track === "video" ? (
+              <video
+                key="video"
+                ref={(element) => {
+                  mediaRef.current = element;
                 }}
-                disabled={busy !== null}
-                showPreview={false}
+                className={
+                  wide
+                    ? "min-h-0 w-full flex-1 rounded-xl bg-black object-contain"
+                    : "max-h-56 w-full rounded-xl bg-black"
+                }
+                playsInline
+                src={sourceVideoUrl(jobId)}
+                {...mediaProps}
               />
-            </div>
-          )}
-        </div>
-        <TimelineTrack
-          lines={lines}
-          rests={review.rests}
-          editedIndexes={dirtyIndexes}
-          currentIndex={current}
-          timeMs={timeMs}
-          durationMs={
-            review.duration_ms ??
-            (lines.length ? lines[lines.length - 1].end_ms + 5_000 : 0)
-          }
-          audioUrl={audioTrackUrl(jobId, review.has_vocals ? "vocals" : "mix")}
-          onSeek={(ms) => {
-            stopAtRef.current = null;
-            if (mediaRef.current) mediaRef.current.currentTime = ms / 1000;
-          }}
-          onChange={(index, start_ms, end_ms) =>
-            setDraft(index, { start_ms, end_ms })
-          }
+            ) : (
+              <audio
+                key="vocals"
+                ref={(element) => {
+                  mediaRef.current = element;
+                }}
+                className="w-full"
+                src={audioTrackUrl(jobId, "vocals")}
+                {...mediaProps}
+              />
+            );
+
+  const preview = (
+    <KaraokePreview
+      line={current >= 0 ? lines[current] : null}
+      timeMs={timeMs}
+      style={style}
+    />
+  );
+
+  const styleEditor = (
+    <div className="space-y-3">
+      <p className="text-xs text-muted-foreground">{REVIEW_COPY.styleHint}</p>
+      <StylePanel
+        value={style}
+        onChange={(next) => {
+          setStyle(next);
+          setStyleDirty(true);
+        }}
+        disabled={busy !== null}
+        showPreview={false}
+      />
+    </div>
+  );
+
+  const waveform = (
+    <TimelineTrack
+      lines={lines}
+      rests={review.rests}
+      editedIndexes={dirtyIndexes}
+      currentIndex={current}
+      timeMs={timeMs}
+      durationMs={
+        review.duration_ms ??
+        (lines.length ? lines[lines.length - 1].end_ms + 5_000 : 0)
+      }
+      audioUrl={audioTrackUrl(jobId, review.has_vocals ? "vocals" : "mix")}
+      onSeek={(ms) => {
+        stopAtRef.current = null;
+        if (mediaRef.current) mediaRef.current.currentTime = ms / 1000;
+      }}
+      onChange={(index, start_ms, end_ms) =>
+        setDraft(index, { start_ms, end_ms })
+      }
+    />
+  );
+
+  const summary = (
+    <div className="mt-2 flex flex-wrap items-center justify-between gap-3 text-sm">
+      <span
+        className={`inline-flex items-center gap-1.5 ${
+          concernCount ? "text-amber-600" : "text-muted-foreground"
+        }`}
+      >
+        {concernCount > 0 && <AlertTriangle className="size-4" />}
+        {REVIEW_COPY.concernSummary(concernCount)}
+      </span>
+      <label className="flex items-center gap-2 text-muted-foreground">
+        <input
+          type="checkbox"
+          checked={concernsOnly}
+          onChange={(event) => setConcernsOnly(event.target.checked)}
         />
-      </div>
+        {REVIEW_COPY.showConcernsOnly}
+      </label>
+    </div>
+  );
 
-      <div className="mt-2 flex flex-wrap items-center justify-between gap-3 text-sm">
-        <span
-          className={`inline-flex items-center gap-1.5 ${
-            concernCount ? "text-amber-600" : "text-muted-foreground"
-          }`}
-        >
-          {concernCount > 0 && <AlertTriangle className="size-4" />}
-          {REVIEW_COPY.concernSummary(concernCount)}
-        </span>
-        <label className="flex items-center gap-2 text-muted-foreground">
-          <input
-            type="checkbox"
-            checked={concernsOnly}
-            onChange={(event) => setConcernsOnly(event.target.checked)}
-          />
-          {REVIEW_COPY.showConcernsOnly}
-        </label>
-      </div>
-
+  const banners = (
+    <>
       {review.can_retry_forced_alignment && (
         <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
           <p className="min-w-0 flex-1">
@@ -644,269 +677,423 @@ export function TimelineReview({
           {REVIEW_COPY.readingsLocalWarning}
         </p>
       )}
+    </>
+  );
 
-      <ol className="mt-3 space-y-1.5">
-        {lines.map((line, index) => {
-          const concerns = lineConcerns(line, pace);
-          const draft = drafts[index];
-          const wasMoved = movedLines.includes(index);
-          const isStuck = stuckLines.includes(index);
-          const byLrc = lrcLines.includes(index);
-          if (
-            concernsOnly &&
-            !concerns.length &&
-            !draft &&
-            !wasMoved &&
-            !isStuck &&
-            !byLrc
-          )
-            return null;
-          const invalid = invalidIndexes.includes(index);
-          const startMs = draft?.start_ms ?? line.start_ms;
-          const endMs = draft?.end_ms ?? line.end_ms;
-          return (
-            <li
-              key={index}
-              className={`rounded-xl border px-3 py-2 transition ${
-                index === current
-                  ? "border-primary bg-primary/5"
-                  : "bg-card"
-              }`}
-            >
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+  const lineList = (
+    <ol
+      ref={listRef}
+      className={
+        wide
+          ? "min-h-0 flex-1 space-y-1.5 overflow-y-auto overscroll-contain pr-1"
+          : "mt-3 space-y-1.5"
+      }
+    >
+      {lines.map((line, index) => {
+        const concerns = lineConcerns(line, pace);
+        const draft = drafts[index];
+        const wasMoved = movedLines.includes(index);
+        const isStuck = stuckLines.includes(index);
+        const byLrc = lrcLines.includes(index);
+        if (
+          concernsOnly &&
+          !concerns.length &&
+          !draft &&
+          !wasMoved &&
+          !isStuck &&
+          !byLrc
+        )
+          return null;
+        const invalid = invalidIndexes.includes(index);
+        const startMs = draft?.start_ms ?? line.start_ms;
+        const endMs = draft?.end_ms ?? line.end_ms;
+        return (
+          <li
+            key={index}
+            data-line={index}
+            className={`rounded-xl border px-3 py-2 transition ${
+              index === current
+                ? "border-primary bg-primary/5"
+                : "bg-card"
+            }`}
+          >
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <button
+                type="button"
+                onClick={() => playLine(index)}
+                title={REVIEW_COPY.playLine}
+                aria-label={`${REVIEW_COPY.playLine} ${index + 1}`}
+                className="focus-ring flex size-8 shrink-0 items-center justify-center rounded-full border bg-card transition hover:bg-muted"
+              >
+                <Play className="size-3.5" />
+              </button>
+              <span className="w-6 shrink-0 text-right font-mono text-xs text-muted-foreground">
+                {index + 1}
+              </span>
+              <span className="min-w-40 flex-1 text-sm">{line.surface}</span>
+              {concerns.includes("short") && (
+                <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
+                  {REVIEW_COPY.concernShort}
+                </span>
+              )}
+              {concerns.includes("low_confidence") && (
+                <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
+                  {REVIEW_COPY.concernLowConfidence}
+                </span>
+              )}
+              {concerns.includes("odd_pace") && (
+                <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
+                  {REVIEW_COPY.concernOddPace}
+                </span>
+              )}
+              {isStuck && (
+                <span className="rounded bg-red-100 px-1.5 py-0.5 text-xs text-red-800">
+                  {REVIEW_COPY.stuckInRest}
+                </span>
+              )}
+              {byLrc && (
+                <span className="rounded bg-sky-100 px-1.5 py-0.5 text-xs text-sky-800">
+                  {REVIEW_COPY.lrcAdjusted}
+                </span>
+              )}
+              {wasMoved && (
+                <span className="rounded bg-sky-100 px-1.5 py-0.5 text-xs text-sky-800">
+                  {REVIEW_COPY.movedOutOfRest}
+                </span>
+              )}
+              {draft && (
+                <span className="rounded bg-primary/10 px-1.5 py-0.5 text-xs text-primary">
+                  {REVIEW_COPY.edited}
+                </span>
+              )}
+              {review.can_edit_readings && (
                 <button
                   type="button"
-                  onClick={() => playLine(index)}
-                  title={REVIEW_COPY.playLine}
-                  aria-label={`${REVIEW_COPY.playLine} ${index + 1}`}
-                  className="focus-ring flex size-8 shrink-0 items-center justify-center rounded-full border bg-card transition hover:bg-muted"
+                  aria-expanded={openReadings === index}
+                  title={REVIEW_COPY.readingsTitle}
+                  aria-label={`${REVIEW_COPY.readings} ${index + 1}`}
+                  onClick={() =>
+                    setOpenReadings((open) => (open === index ? null : index))
+                  }
+                  className={`focus-ring inline-flex items-center gap-1 rounded border px-1.5 py-1 text-xs font-medium transition ${
+                    openReadings === index ||
+                    readingKeys.some((key) => key.startsWith(`${index}:`))
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "bg-card text-muted-foreground hover:bg-muted"
+                  }`}
                 >
-                  <Play className="size-3.5" />
+                  <BookOpenText className="size-3.5" />
+                  {REVIEW_COPY.readings}
                 </button>
-                <span className="w-6 shrink-0 text-right font-mono text-xs text-muted-foreground">
-                  {index + 1}
-                </span>
-                <span className="min-w-40 flex-1 text-sm">{line.surface}</span>
-                {concerns.includes("short") && (
-                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
-                    {REVIEW_COPY.concernShort}
-                  </span>
-                )}
-                {concerns.includes("low_confidence") && (
-                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
-                    {REVIEW_COPY.concernLowConfidence}
-                  </span>
-                )}
-                {concerns.includes("odd_pace") && (
-                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
-                    {REVIEW_COPY.concernOddPace}
-                  </span>
-                )}
-                {isStuck && (
-                  <span className="rounded bg-red-100 px-1.5 py-0.5 text-xs text-red-800">
-                    {REVIEW_COPY.stuckInRest}
-                  </span>
-                )}
-                {byLrc && (
-                  <span className="rounded bg-sky-100 px-1.5 py-0.5 text-xs text-sky-800">
-                    {REVIEW_COPY.lrcAdjusted}
-                  </span>
-                )}
-                {wasMoved && (
-                  <span className="rounded bg-sky-100 px-1.5 py-0.5 text-xs text-sky-800">
-                    {REVIEW_COPY.movedOutOfRest}
-                  </span>
-                )}
-                {draft && (
-                  <span className="rounded bg-primary/10 px-1.5 py-0.5 text-xs text-primary">
-                    {REVIEW_COPY.edited}
-                  </span>
-                )}
-                {review.can_edit_readings && (
-                  <button
-                    type="button"
-                    aria-expanded={openReadings === index}
-                    title={REVIEW_COPY.readingsTitle}
-                    aria-label={`${REVIEW_COPY.readings} ${index + 1}`}
-                    onClick={() =>
-                      setOpenReadings((open) => (open === index ? null : index))
-                    }
-                    className={`focus-ring inline-flex items-center gap-1 rounded border px-1.5 py-1 text-xs font-medium transition ${
-                      openReadings === index ||
-                      readingKeys.some((key) => key.startsWith(`${index}:`))
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "bg-card text-muted-foreground hover:bg-muted"
-                    }`}
-                  >
-                    <BookOpenText className="size-3.5" />
-                    {REVIEW_COPY.readings}
-                  </button>
-                )}
-                <div className="flex items-center gap-1.5 text-xs">
-                  {(
-                    [
-                      ["start_ms", REVIEW_COPY.lineStart, startMs, REVIEW_COPY.setStart],
-                      ["end_ms", REVIEW_COPY.lineEnd, endMs, REVIEW_COPY.setEnd],
-                    ] as const
-                  ).map(([field, label, value, hint]) => (
-                    <span key={field} className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        title={hint}
-                        aria-label={`${hint} ${index + 1}`}
-                        onClick={() =>
-                          setDraft(index, {
-                            [field]: Math.round(
-                              (mediaRef.current?.currentTime ?? 0) * 1000,
-                            ),
-                          })
-                        }
-                        className="focus-ring rounded border bg-card px-1.5 py-1 font-medium transition hover:bg-muted"
-                      >
-                        {label}
-                      </button>
-                      <TimeInput
-                        valueMs={value}
-                        label={`${label} ${index + 1}`}
-                        invalid={invalid}
-                        onCommit={(ms) => setDraft(index, { [field]: ms })}
-                      />
-                    </span>
-                  ))}
-                  {draft && (
+              )}
+              <div className="flex items-center gap-1.5 text-xs">
+                {(
+                  [
+                    ["start_ms", REVIEW_COPY.lineStart, startMs, REVIEW_COPY.setStart],
+                    ["end_ms", REVIEW_COPY.lineEnd, endMs, REVIEW_COPY.setEnd],
+                  ] as const
+                ).map(([field, label, value, hint]) => (
+                  <span key={field} className="flex items-center gap-1">
                     <button
                       type="button"
-                      title={REVIEW_COPY.resetLine}
-                      aria-label={`${REVIEW_COPY.resetLine} ${index + 1}`}
+                      title={hint}
+                      aria-label={`${hint} ${index + 1}`}
                       onClick={() =>
-                        setDrafts((previous) => {
-                          const copy = { ...previous };
-                          delete copy[index];
-                          return copy;
+                        setDraft(index, {
+                          [field]: Math.round(
+                            (mediaRef.current?.currentTime ?? 0) * 1000,
+                          ),
                         })
                       }
-                      className="focus-ring rounded p-1 text-muted-foreground transition hover:bg-muted"
+                      className="focus-ring rounded border bg-card px-1.5 py-1 font-medium transition hover:bg-muted"
                     >
-                      <RotateCcw className="size-3.5" />
+                      {label}
                     </button>
+                    <TimeInput
+                      valueMs={value}
+                      label={`${label} ${index + 1}`}
+                      invalid={invalid}
+                      onCommit={(ms) => setDraft(index, { [field]: ms })}
+                    />
+                  </span>
+                ))}
+                {draft && (
+                  <button
+                    type="button"
+                    title={REVIEW_COPY.resetLine}
+                    aria-label={`${REVIEW_COPY.resetLine} ${index + 1}`}
+                    onClick={() =>
+                      setDrafts((previous) => {
+                        const copy = { ...previous };
+                        delete copy[index];
+                        return copy;
+                      })
+                    }
+                    className="focus-ring rounded p-1 text-muted-foreground transition hover:bg-muted"
+                  >
+                    <RotateCcw className="size-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+            {invalid && (
+              <p className="mt-1 text-xs text-destructive">
+                {REVIEW_COPY.invalidRange}
+              </p>
+            )}
+            {openReadings === index && (
+              <div className="mt-2 border-t pt-2">
+                <div className="flex flex-wrap gap-2">
+                  {line.tokens.map((token, tokenIndex) => {
+                    if (!hasCheckableReading(token.surface, token.reading)) {
+                      return null;
+                    }
+                    const key = `${index}:${tokenIndex}`;
+                    const value = readingDrafts[key] ?? token.reading;
+                    const bad = key in readingDrafts && !isKanaReading(value);
+                    return (
+                      <label
+                        key={key}
+                        className="flex items-center gap-1.5 rounded-lg border bg-card px-2 py-1 text-sm"
+                      >
+                        <span className="font-medium">{token.surface}</span>
+                        <input
+                          type="text"
+                          value={value}
+                          maxLength={64}
+                          aria-invalid={bad}
+                          aria-label={`${token.surface} ${REVIEW_COPY.readings}`}
+                          title={bad ? REVIEW_COPY.readingInvalid : undefined}
+                          onChange={(event) => {
+                            const next = event.target.value;
+                            setNotice(null);
+                            setReadingDrafts((previous) => {
+                              const copy = { ...previous };
+                              if (next === token.reading) delete copy[key];
+                              else copy[key] = next;
+                              return copy;
+                            });
+                          }}
+                          className={`focus-ring w-28 rounded border bg-card px-1.5 py-0.5 text-sm ${
+                            bad ? "border-destructive" : ""
+                          }`}
+                        />
+                      </label>
+                    );
+                  })}
+                  {!line.tokens.some((token) =>
+                    hasCheckableReading(token.surface, token.reading),
+                  ) && (
+                    <span className="text-xs text-muted-foreground">
+                      {REVIEW_COPY.readingsNone}
+                    </span>
                   )}
                 </div>
-              </div>
-              {invalid && (
-                <p className="mt-1 text-xs text-destructive">
-                  {REVIEW_COPY.invalidRange}
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {REVIEW_COPY.readingsHint}
                 </p>
-              )}
-              {openReadings === index && (
-                <div className="mt-2 border-t pt-2">
-                  <div className="flex flex-wrap gap-2">
-                    {line.tokens.map((token, tokenIndex) => {
-                      if (!hasCheckableReading(token.surface, token.reading)) {
-                        return null;
-                      }
-                      const key = `${index}:${tokenIndex}`;
-                      const value = readingDrafts[key] ?? token.reading;
-                      const bad = key in readingDrafts && !isKanaReading(value);
-                      return (
-                        <label
-                          key={key}
-                          className="flex items-center gap-1.5 rounded-lg border bg-card px-2 py-1 text-sm"
-                        >
-                          <span className="font-medium">{token.surface}</span>
-                          <input
-                            type="text"
-                            value={value}
-                            maxLength={64}
-                            aria-invalid={bad}
-                            aria-label={`${token.surface} ${REVIEW_COPY.readings}`}
-                            title={bad ? REVIEW_COPY.readingInvalid : undefined}
-                            onChange={(event) => {
-                              const next = event.target.value;
-                              setNotice(null);
-                              setReadingDrafts((previous) => {
-                                const copy = { ...previous };
-                                if (next === token.reading) delete copy[key];
-                                else copy[key] = next;
-                                return copy;
-                              });
-                            }}
-                            className={`focus-ring w-28 rounded border bg-card px-1.5 py-0.5 text-sm ${
-                              bad ? "border-destructive" : ""
-                            }`}
-                          />
-                        </label>
-                      );
-                    })}
-                    {!line.tokens.some((token) =>
-                      hasCheckableReading(token.surface, token.reading),
-                    ) && (
-                      <span className="text-xs text-muted-foreground">
-                        {REVIEW_COPY.readingsNone}
-                      </span>
-                    )}
-                  </div>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    {REVIEW_COPY.readingsHint}
-                  </p>
-                </div>
-              )}
-            </li>
-          );
-        })}
-      </ol>
+              </div>
+            )}
+          </li>
+        );
+      })}
+    </ol>
+  );
 
-      <div className="mt-5 space-y-3">
-        {error && <ErrorFeedbackPanel feedback={error} />}
-        {notice && (
-          <p className="rounded-lg bg-primary/10 px-3 py-2 text-sm text-primary">
-            {notice}
-          </p>
-        )}
-        <div className="flex flex-wrap items-center gap-3">
+  const actions = (
+    <div className={wide ? "space-y-2 border-t pt-3" : "mt-5 space-y-3"}>
+      {error && <ErrorFeedbackPanel feedback={error} />}
+      {notice && (
+        <p className="rounded-lg bg-primary/10 px-3 py-2 text-sm text-primary">
+          {notice}
+        </p>
+      )}
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          disabled={busy !== null || blocked || !unsavedCount}
+          onClick={() => run("save")}
+          className="focus-ring inline-flex items-center gap-2 rounded-lg border bg-card px-4 py-2.5 text-sm font-semibold transition hover:bg-muted disabled:opacity-50"
+        >
+          <Save className="size-4" />
+          {busy === "save" ? REVIEW_COPY.saving : REVIEW_COPY.save}
+        </button>
+        {review.can_refine && (
           <button
             type="button"
-            disabled={busy !== null || blocked || !unsavedCount}
-            onClick={() => run("save")}
+            disabled={busy !== null || blocked || (!unsavedCount && !rereadLines.length)}
+            onClick={() => run("refine")}
+            title={REVIEW_COPY.refineHint}
             className="focus-ring inline-flex items-center gap-2 rounded-lg border bg-card px-4 py-2.5 text-sm font-semibold transition hover:bg-muted disabled:opacity-50"
           >
-            <Save className="size-4" />
-            {busy === "save" ? REVIEW_COPY.saving : REVIEW_COPY.save}
+            {busy === "refine" ? (
+              <LoaderCircle className="size-4 animate-spin" />
+            ) : (
+              <Sparkles className="size-4" />
+            )}
+            {busy === "refine" ? REVIEW_COPY.refining : REVIEW_COPY.refine}
           </button>
-          {review.can_refine && (
-            <button
-              type="button"
-              disabled={busy !== null || blocked || (!unsavedCount && !rereadLines.length)}
-              onClick={() => run("refine")}
-              title={REVIEW_COPY.refineHint}
-              className="focus-ring inline-flex items-center gap-2 rounded-lg border bg-card px-4 py-2.5 text-sm font-semibold transition hover:bg-muted disabled:opacity-50"
-            >
-              {busy === "refine" ? (
-                <LoaderCircle className="size-4 animate-spin" />
-              ) : (
-                <Sparkles className="size-4" />
-              )}
-              {busy === "refine" ? REVIEW_COPY.refining : REVIEW_COPY.refine}
-            </button>
-          )}
-          <button
-            type="button"
-            disabled={busy !== null || blocked}
-            onClick={() => run("render")}
-            className="focus-ring inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition hover:brightness-95 disabled:cursor-wait disabled:opacity-60"
-          >
-            <Clapperboard className="size-4" />
-            {busy === "render" ? REVIEW_COPY.rendering : REVIEW_COPY.render}
-          </button>
-          {unsavedCount > 0 && (
-            <span className="text-xs text-muted-foreground">
-              {REVIEW_COPY.unsavedCount(unsavedCount)}
-            </span>
-          )}
-        </div>
-        {review.can_refine && (
-          <p className="text-xs text-muted-foreground">{REVIEW_COPY.refineHint}</p>
+        )}
+        <button
+          type="button"
+          disabled={busy !== null || blocked}
+          onClick={() => run("render")}
+          className="focus-ring inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition hover:brightness-95 disabled:cursor-wait disabled:opacity-60"
+        >
+          <Clapperboard className="size-4" />
+          {busy === "render" ? REVIEW_COPY.rendering : REVIEW_COPY.render}
+        </button>
+        {unsavedCount > 0 && (
+          <span className="text-xs text-muted-foreground">
+            {REVIEW_COPY.unsavedCount(unsavedCount)}
+          </span>
         )}
       </div>
+      {review.can_refine && (
+        <p className="text-xs text-muted-foreground">{REVIEW_COPY.refineHint}</p>
+      )}
+    </div>
+  );
+
+  const heading = (
+    <h2
+      id="review-panel-heading"
+      className="flex items-center gap-2 font-display text-xl font-bold"
+    >
+      <Clapperboard className="size-5 text-primary" />
+      {REVIEW_COPY.heading}
+    </h2>
+  );
+
+  if (wide) {
+    // A workbench that fills the window: what is watched stays on the left,
+    // what is edited scrolls on the right, and nothing else moves.  It is
+    // mounted on the body so no ancestor can confine a fixed element.
+    return createPortal(
+      <section
+        className="fixed inset-0 z-40 flex flex-col bg-background"
+        aria-labelledby="review-panel-heading"
+      >
+        <div className="flex items-center gap-4 border-b bg-card px-5 py-2.5">
+          {heading}
+          <p className="hidden min-w-0 flex-1 truncate text-xs text-muted-foreground 2xl:block">
+            {REVIEW_COPY.description}
+          </p>
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              type="button"
+              aria-expanded={styleOpen}
+              onClick={() => setStyleOpen((open) => !open)}
+              className={`focus-ring inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
+                styleOpen
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "bg-card hover:bg-muted"
+              }`}
+            >
+              <Palette className="size-4" />
+              {REVIEW_COPY.styleTitle}
+            </button>
+            <button
+              type="button"
+              onClick={() => toggleWorkbench(false)}
+              title={REVIEW_COPY.workbenchExitHint}
+              className="focus-ring inline-flex items-center gap-1.5 rounded-lg border bg-card px-3 py-1.5 text-sm font-semibold transition hover:bg-muted"
+            >
+              <Minimize2 className="size-4" />
+              {REVIEW_COPY.workbenchExit}
+            </button>
+          </div>
+        </div>
+
+        <div className="relative grid min-h-0 flex-1 grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] gap-5 px-5 py-4">
+          <div className="flex min-h-0 flex-col gap-3">
+            {trackSwitch}
+            {media}
+            {preview}
+            {waveform}
+          </div>
+
+          <div className="flex min-h-0 flex-col gap-3">
+            {summary}
+            {banners}
+            {lineList}
+            {actions}
+          </div>
+
+          {styleOpen && (
+            <aside
+              aria-label={REVIEW_COPY.styleTitle}
+              className="absolute inset-y-0 right-0 z-10 flex w-[30rem] max-w-full flex-col border-l bg-card shadow-xl"
+            >
+              <div className="flex items-center justify-between border-b px-4 py-2.5">
+                <p className="text-sm font-semibold">{REVIEW_COPY.styleTitle}</p>
+                <button
+                  type="button"
+                  aria-label={REVIEW_COPY.styleClose}
+                  onClick={() => setStyleOpen(false)}
+                  className="focus-ring rounded p-1 text-muted-foreground transition hover:bg-muted"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
+                {styleEditor}
+              </div>
+            </aside>
+          )}
+        </div>
+      </section>,
+      document.body,
+    );
+  }
+
+  return (
+    <section
+      className="rounded-3xl border bg-card p-6 sm:p-9"
+      aria-labelledby="review-panel-heading"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        {heading}
+        {canExpand && (
+          <button
+            type="button"
+            onClick={() => toggleWorkbench(true)}
+            className="focus-ring inline-flex items-center gap-1.5 rounded-lg border bg-card px-3 py-1.5 text-sm font-semibold transition hover:bg-muted"
+          >
+            <Maximize2 className="size-4" />
+            {REVIEW_COPY.workbenchEnter}
+          </button>
+        )}
+      </div>
+      <p className="mt-2 text-sm text-muted-foreground">
+        {REVIEW_COPY.description}
+      </p>
+
+      <div className="sticky top-0 z-10 -mx-2 mt-5 space-y-3 bg-card px-2 pb-3 pt-1">
+        {trackSwitch}
+        {media}
+        {preview}
+        <div className="rounded-xl border bg-card/60 px-3 py-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-semibold">{REVIEW_COPY.styleTitle}</p>
+            <button
+              type="button"
+              aria-expanded={styleOpen}
+              onClick={() => setStyleOpen((open) => !open)}
+              className="focus-ring rounded-lg border bg-card px-3 py-1.5 text-xs font-semibold transition hover:bg-muted"
+            >
+              {styleOpen ? REVIEW_COPY.styleClose : REVIEW_COPY.styleOpen}
+            </button>
+          </div>
+          {styleOpen && <div className="mt-3">{styleEditor}</div>}
+        </div>
+        {waveform}
+      </div>
+
+      {summary}
+      {banners}
+      {lineList}
+      {actions}
     </section>
   );
 }
