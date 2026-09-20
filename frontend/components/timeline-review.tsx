@@ -548,7 +548,7 @@ export function TimelineReview({
 
   if (!review) {
     return (
-      <section className="rounded-3xl border bg-card p-6 sm:p-9">
+      <section className="surface p-5 sm:p-7">
         {error ? (
           <ErrorFeedbackPanel feedback={error} />
         ) : (
@@ -688,7 +688,7 @@ export function TimelineReview({
     <div className="mt-2 flex flex-wrap items-center justify-between gap-3 text-sm">
       <span
         className={`inline-flex items-center gap-1.5 ${
-          concernCount ? "text-amber-600" : "text-muted-foreground"
+          concernCount ? "text-warning" : "text-muted-foreground"
         }`}
       >
         {concernCount > 0 && <AlertTriangle className="size-4" />}
@@ -708,7 +708,7 @@ export function TimelineReview({
   const banners = (
     <>
       {review.can_retry_forced_alignment && (
-        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg bg-warning/10 px-3 py-2 text-xs text-warning">
           <p className="min-w-0 flex-1">
             <span className="font-semibold">{REVIEW_COPY.fallbackTitle}</span>
             <br />
@@ -720,7 +720,7 @@ export function TimelineReview({
             type="button"
             disabled={busy !== null}
             onClick={retryForced}
-            className="focus-ring rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold transition hover:bg-amber-100 disabled:opacity-50"
+            className="focus-ring rounded-lg border border-warning/40 bg-card px-3 py-1.5 text-xs font-semibold transition hover:bg-warning/15 disabled:opacity-50"
           >
             {busy === "forced"
               ? REVIEW_COPY.fallbackRetrying
@@ -730,7 +730,7 @@ export function TimelineReview({
       )}
 
       {review.lyrics_provider === "local" && review.can_edit_readings && (
-        <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
+        <p className="mt-3 rounded-lg bg-warning/10 px-3 py-2 text-xs text-warning">
           {REVIEW_COPY.readingsLocalWarning}
         </p>
       )}
@@ -824,32 +824,32 @@ export function TimelineReview({
                   : line.surface}
               </span>
               {concerns.includes("short") && (
-                <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
+                <span className="rounded bg-warning/15 px-1.5 py-0.5 text-xs text-warning">
                   {REVIEW_COPY.concernShort}
                 </span>
               )}
               {concerns.includes("low_confidence") && (
-                <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
+                <span className="rounded bg-warning/15 px-1.5 py-0.5 text-xs text-warning">
                   {REVIEW_COPY.concernLowConfidence}
                 </span>
               )}
               {concerns.includes("odd_pace") && (
-                <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
+                <span className="rounded bg-warning/15 px-1.5 py-0.5 text-xs text-warning">
                   {REVIEW_COPY.concernOddPace}
                 </span>
               )}
               {isStuck && (
-                <span className="rounded bg-red-100 px-1.5 py-0.5 text-xs text-red-800">
+                <span className="rounded bg-destructive/15 px-1.5 py-0.5 text-xs text-destructive">
                   {REVIEW_COPY.stuckInRest}
                 </span>
               )}
               {byLrc && (
-                <span className="rounded bg-sky-100 px-1.5 py-0.5 text-xs text-sky-800">
+                <span className="rounded bg-info/15 px-1.5 py-0.5 text-xs text-info">
                   {REVIEW_COPY.lrcAdjusted}
                 </span>
               )}
               {wasMoved && (
-                <span className="rounded bg-sky-100 px-1.5 py-0.5 text-xs text-sky-800">
+                <span className="rounded bg-info/15 px-1.5 py-0.5 text-xs text-info">
                   {REVIEW_COPY.movedOutOfRest}
                 </span>
               )}
@@ -1051,7 +1051,7 @@ export function TimelineReview({
   const heading = (
     <h2
       id="review-panel-heading"
-      className="flex items-center gap-2 font-display text-xl font-bold"
+      className="flex items-center gap-2 text-lg font-bold"
     >
       <Clapperboard className="size-5 text-primary" />
       {REVIEW_COPY.heading}
@@ -1067,35 +1067,37 @@ export function TimelineReview({
         className={`fixed inset-x-0 bottom-0 ${BELOW_HEADER} z-40 flex flex-col bg-background`}
         aria-labelledby="review-panel-heading"
       >
-        <div className={`${PAGE_WIDTH} flex items-center gap-4 border-b py-2.5`}>
-          {heading}
-          <p className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
-            {title}
-          </p>
-          <div className="ml-auto flex items-center gap-2">
-            <button
-              type="button"
-              aria-expanded={styleOpen}
-              onClick={() => setStyleOpen((open) => !open)}
-              className={`focus-ring inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
-                styleOpen
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "bg-card hover:bg-muted"
-              }`}
-            >
-              <Palette className="size-4" />
-              {REVIEW_COPY.styleTitle}
-            </button>
-            {onClose && (
+        <div className="border-b bg-card/70">
+          <div className={`${PAGE_WIDTH} flex items-center gap-4 py-2`}>
+            {heading}
+            <p className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
+              {title}
+            </p>
+            <div className="ml-auto flex items-center gap-2">
               <button
                 type="button"
-                onClick={onClose}
-                className="focus-ring inline-flex items-center gap-1.5 rounded-lg border bg-card px-3 py-1.5 text-sm font-semibold transition hover:bg-muted"
+                aria-expanded={styleOpen}
+                onClick={() => setStyleOpen((open) => !open)}
+                className={`focus-ring inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
+                  styleOpen
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "bg-card hover:bg-muted"
+                }`}
               >
-                <X className="size-4" />
-                {REVIEW_COPY.close}
+                <Palette className="size-4" />
+                {REVIEW_COPY.styleTitle}
               </button>
-            )}
+              {onClose && (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="focus-ring inline-flex items-center gap-1.5 rounded-lg border bg-card px-3 py-1.5 text-sm font-semibold transition hover:bg-muted"
+                >
+                  <X className="size-4" />
+                  {REVIEW_COPY.close}
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -1145,7 +1147,7 @@ export function TimelineReview({
 
   return (
     <section
-      className="rounded-3xl border bg-card p-6 sm:p-9"
+      className="surface p-5 sm:p-7"
       aria-labelledby="review-panel-heading"
     >
       <div className="flex flex-wrap items-center justify-between gap-3">

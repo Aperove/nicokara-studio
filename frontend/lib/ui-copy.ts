@@ -204,3 +204,9 @@ export const JOBS_COPY = {
   hoursAgo: (hours: number) => `${hours} 小时前`,
   daysAgo: (days: number) => `${days} 天前`,
 } as const;
+
+export const THEME_COPY = {
+  label: "外观",
+  names: { light: "明亮", dark: "暗色", system: "跟随系统" },
+  switchTo: (name: string) => `切换到${name}`,
+} as const;

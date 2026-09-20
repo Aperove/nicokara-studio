@@ -37,9 +37,9 @@ export function HomeWorkspace() {
     >
       <section
         aria-labelledby="create-heading"
-        className="rounded-2xl border bg-card/92 p-5 sm:p-7"
+        className="surface p-5 sm:p-7"
       >
-        <h1 id="create-heading" className="font-display text-2xl font-bold">
+        <h1 id="create-heading" className="text-xl font-bold">
           {CREATE_COPY.heading}
         </h1>
         <p className="mb-6 mt-1.5 text-sm text-muted-foreground">

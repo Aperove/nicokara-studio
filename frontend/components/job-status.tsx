@@ -51,11 +51,11 @@ function ResultVideos({ job }: { job: Job }) {
 
   return (
     <section
-      className="rounded-3xl border bg-card p-6 sm:p-8"
+      className="surface p-5 sm:p-6"
       aria-labelledby="result-video-heading"
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 id="result-video-heading" className="font-display text-xl font-bold">
+        <h2 id="result-video-heading" className="text-lg font-bold">
           {JOB_COPY.resultHeading}
         </h2>
         {offAvailable && (
@@ -170,12 +170,12 @@ function RestylePanel({
 
   return (
     <section
-      className="rounded-3xl border bg-card p-6"
+      className="surface p-5"
       aria-labelledby="restyle-heading"
     >
       <h2
         id="restyle-heading"
-        className="flex items-center gap-2 font-display text-xl font-bold"
+        className="flex items-center gap-2 text-lg font-bold"
       >
         <Palette className="size-5 text-primary" />
         {STYLE_COPY.restyleHeading}
@@ -250,7 +250,7 @@ export function JobStatus({ jobId }: { jobId: string }) {
 
   if (requestError && !job) {
     return (
-      <div className="space-y-5 rounded-2xl border bg-card p-5 sm:p-8">
+      <div className="space-y-5 surface p-5 sm:p-7">
         <ErrorFeedbackPanel
           feedback={requestError}
           onRetry={
@@ -305,13 +305,13 @@ export function JobStatus({ jobId }: { jobId: string }) {
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_30rem] xl:items-start">
         <div className="min-w-0 space-y-6">
           {job.status === "COMPLETED" && <ResultVideos job={job} />}
-      <div className="rounded-3xl border bg-card p-6 sm:p-9">
+      <div className="surface p-5 sm:p-7">
         <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="text-xs font-medium tracking-[0.18em] text-primary">
               {presentation.eyebrow}
             </p>
-            <h1 className="mt-3 font-display text-3xl font-bold">
+            <h1 className="mt-3 text-2xl font-bold">
               {presentation.title}
             </h1>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
@@ -365,7 +365,7 @@ export function JobStatus({ jobId }: { jobId: string }) {
         </div>
 
         <aside className="space-y-6">
-          <div className="rounded-3xl border bg-card p-6">
+          <div className="surface p-5">
         <dl className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
           <div className="rounded-xl bg-muted/65 p-4">
             <dt className="flex items-center gap-2 text-xs text-muted-foreground">

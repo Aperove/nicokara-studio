@@ -1,30 +1,69 @@
 @import "tailwindcss";
 
+/* Dark mode follows the class the theme switch puts on <html>. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
-  --color-background: oklch(95.8% 0.008 230);
-  --color-foreground: oklch(24% 0.018 260);
-  --color-card: oklch(99% 0.003 240);
-  --color-card-foreground: oklch(24% 0.018 260);
-  --color-primary: oklch(64% 0.18 356);
+  --color-background: oklch(97.2% 0.004 260);
+  --color-foreground: oklch(21% 0.015 265);
+  --color-card: oklch(100% 0 0);
+  --color-card-foreground: oklch(21% 0.015 265);
+  --color-primary: oklch(62% 0.2 356);
   --color-primary-foreground: oklch(99% 0 0);
   --color-secondary: oklch(78% 0.09 220);
   --color-secondary-foreground: oklch(30% 0.035 257);
-  --color-muted: oklch(91% 0.012 240);
-  --color-muted-foreground: oklch(50% 0.02 257);
-  --color-accent: oklch(92% 0.05 345);
-  --color-accent-foreground: oklch(24% 0.018 260);
-  --color-border: oklch(84% 0.015 240);
-  --color-ring: oklch(64% 0.18 356);
-  --color-destructive: oklch(56% 0.22 27);
-  --font-sans: "Noto Sans JP", "Yu Gothic UI", "Yu Gothic", "Meiryo", system-ui, sans-serif;
-  --font-display: "Yu Mincho", "Hiragino Mincho ProN", "Noto Serif JP", serif;
+  --color-muted: oklch(94.5% 0.006 260);
+  --color-muted-foreground: oklch(48% 0.015 262);
+  --color-accent: oklch(94% 0.035 350);
+  --color-accent-foreground: oklch(21% 0.015 265);
+  --color-border: oklch(90% 0.008 260);
+  --color-ring: oklch(62% 0.2 356);
+  /* Status colours are text colours; their surfaces are the same colour at
+     low opacity (bg-warning/15), so one token serves both themes. */
+  --color-destructive: oklch(53% 0.21 27);
+  --color-warning: oklch(50% 0.12 70);
+  --color-info: oklch(48% 0.12 240);
+  --color-success: oklch(46% 0.12 155);
+  --font-sans: ui-sans-serif, system-ui, "Segoe UI", "Noto Sans JP",
+    "Yu Gothic UI", "Meiryo", sans-serif;
+  --font-display: ui-sans-serif, system-ui, "Segoe UI", "Noto Sans JP",
+    "Yu Gothic UI", "Meiryo", sans-serif;
+  --shadow-card: 0 1px 2px oklch(21% 0.015 265 / 0.04),
+    0 8px 24px -12px oklch(21% 0.015 265 / 0.1);
 }
 
 @layer base {
+  .dark {
+    --color-background: oklch(16.5% 0.012 265);
+    --color-foreground: oklch(94% 0.006 260);
+    --color-card: oklch(20.5% 0.014 265);
+    --color-card-foreground: oklch(94% 0.006 260);
+    --color-primary: oklch(70% 0.17 356);
+    --color-primary-foreground: oklch(16% 0.02 356);
+    --color-secondary-foreground: oklch(92% 0.02 240);
+    --color-muted: oklch(25.5% 0.015 265);
+    --color-muted-foreground: oklch(70% 0.015 262);
+    --color-accent: oklch(30% 0.05 350);
+    --color-accent-foreground: oklch(94% 0.006 260);
+    --color-border: oklch(30% 0.016 265);
+    --color-ring: oklch(70% 0.17 356);
+    --color-destructive: oklch(74% 0.16 25);
+    --color-warning: oklch(83% 0.13 85);
+    --color-info: oklch(80% 0.1 235);
+    --color-success: oklch(80% 0.13 155);
+    --shadow-card: 0 1px 2px oklch(0% 0 0 / 0.3),
+      0 8px 24px -12px oklch(0% 0 0 / 0.5);
+  }
+
   /* The review workbench stops the page from scrolling; keeping the
      scrollbar's gutter stops everything from shifting sideways then. */
   html {
     scrollbar-gutter: stable;
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
   }
 
   * {
@@ -33,6 +72,13 @@
 
   body {
     @apply bg-background text-foreground antialiased;
+    font-feature-settings: "palt";
+  }
+
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.01em;
   }
 
   button,
@@ -40,8 +86,24 @@
   textarea {
     font: inherit;
   }
+
+  button:not(:disabled),
+  [role="button"] {
+    cursor: pointer;
+  }
+
+  /* Thin scrollbars inside panels, in the colours of the theme. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border) transparent;
+  }
 }
 
 @utility focus-ring {
   @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+}
+
+/* One look for every panel of the application. */
+@utility surface {
+  @apply rounded-2xl border bg-card shadow-card;
 }

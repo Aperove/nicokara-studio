@@ -13,9 +13,9 @@ const ACTIVE_POLL_MS = 3_000;
 const IDLE_POLL_MS = 15_000;
 
 const TONE_CLASSES: Record<JobTone, string> = {
-  success: "bg-emerald-100 text-emerald-800",
-  error: "bg-red-100 text-red-800",
-  pending: "bg-amber-100 text-amber-800",
+  success: "bg-success/15 text-success",
+  error: "bg-destructive/15 text-destructive",
+  pending: "bg-warning/15 text-warning",
   active: "bg-primary/10 text-primary",
 };
 
@@ -82,7 +82,7 @@ export function RecentJobs() {
       </div>
 
       {failed && (
-        <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-800">
+        <p className="mb-3 rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
           {JOBS_COPY.loadFailed}
         </p>
       )}
