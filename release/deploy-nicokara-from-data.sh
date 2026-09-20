@@ -8,16 +8,24 @@ if [[ ${EUID} -ne 0 ]]; then
 fi
 
 PUBLIC_ORIGIN="${1:-}"
-RELEASE_ID="${2:-20260731-01}"
+RELEASE_ID="${2:-$(date +%Y%m%d-%H%M%S)}"
+APP_ARCHIVE="${3:-}"
 
 if [[ ! "$PUBLIC_ORIGIN" =~ ^http://[A-Za-z0-9._-]+$ ]]; then
-  echo "用法: $0 http://服务器IP [发布编号]" >&2
-  echo "示例: $0 http://192.0.2.10 20260731-01" >&2
+  echo "用法: $0 http://服务器IP [发布编号] [应用包路径]" >&2
+  echo "示例: $0 http://192.0.2.10 20260731-01 /data/nicokara-app-20260731-120000.tar.gz" >&2
   exit 1
 fi
 
 SERVER_NAME="${PUBLIC_ORIGIN#http://}"
-APP_ARCHIVE="/data/nicokara-app-20260731.tar.gz"
+if [[ -z "$APP_ARCHIVE" ]]; then
+  # the newest application package that was uploaded
+  APP_ARCHIVE="$(ls -1t /data/nicokara-app-*.tar.gz 2>/dev/null | head -n 1 || true)"
+fi
+if [[ -z "$APP_ARCHIVE" || ! -f "$APP_ARCHIVE" ]]; then
+  echo "没有找到应用包 /data/nicokara-app-*.tar.gz，请先上传，或把路径作为第三个参数传入。" >&2
+  exit 1
+fi
 WHISPER_ARCHIVE="/data/faster-whisper-small.tar.gz"
 MDX_ARCHIVE="/data/audio-separator-UVR_MDXNET_KARA_2.tar.gz"
 APP_ROOT="/data/nicokara"
@@ -45,17 +53,22 @@ if ! id www-data >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "校验部署包..."
+# Every build of the application has a different checksum, so it is checked
+# against the SHA256SUMS file that was generated and uploaded with it.
+echo "校验部署包: $APP_ARCHIVE"
+SUMS_FILE="$(dirname "$APP_ARCHIVE")/SHA256SUMS"
+if [[ ! -f "$SUMS_FILE" ]]; then
+  echo "缺少 $SUMS_FILE，请把打包时生成的 SHA256SUMS 一并上传。" >&2
+  exit 1
+fi
+if ! grep -q "  $(basename "$APP_ARCHIVE")\$" "$SUMS_FILE"; then
+  echo "$SUMS_FILE 里没有 $(basename "$APP_ARCHIVE") 的校验值，两者不是同一次打包生成的。" >&2
+  exit 1
+fi
 (
-  cd /data
-  printf '%s  %s\n' \
-    "4b0e359c808aeebd072e77e6c89c258937f39d6590e15f1145d7eb5fbef188bc" \
-    "nicokara-app-20260731.tar.gz" \
-    "eed6bf573d4b0f26265f0496512b927206d570ac2545b0a1df3f1e9a53a32a90" \
-    "faster-whisper-small.tar.gz" \
-    "cfbf3e7818851a142aaf085237a918fbf8b14d2e3fd92c94739e17f752d0b415" \
-    "audio-separator-UVR_MDXNET_KARA_2.tar.gz" |
-    sha256sum -c -
+  cd "$(dirname "$APP_ARCHIVE")"
+  # model packages only need to be present on the first deployment
+  sha256sum -c --ignore-missing "$SUMS_FILE"
 )
 
 mkdir -p \
@@ -96,9 +109,41 @@ echo "安装后端 Python 依赖..."
 python3 -m venv "$RELEASE_DIR/backend/.venv"
 "$RELEASE_DIR/backend/.venv/bin/python" -m pip install --upgrade pip
 "$RELEASE_DIR/backend/.venv/bin/python" -m pip install \
-  -e "$RELEASE_DIR/backend[ai]"
+  -e "$RELEASE_DIR/backend[ai,reading]"
 
-cat >"$SHARED_DIR/nicokara.env" <<EOF
+# Settings are only added, never overwritten: a redeploy must not wipe a key
+# or a choice that was made on this server.
+ENV_FILE="$SHARED_DIR/nicokara.env"
+touch "$ENV_FILE"
+ensure_env() {
+  if ! grep -q "^$1=" "$ENV_FILE"; then
+    printf '%s=%s\n' "$1" "$2" >>"$ENV_FILE"
+  fi
+}
+set_env() {
+  if grep -q "^$1=" "$ENV_FILE"; then
+    sed -i "s|^$1=.*|$1=$2|" "$ENV_FILE"
+  else
+    printf '%s=%s\n' "$1" "$2" >>"$ENV_FILE"
+  fi
+}
+ensure_env NICOKARA_DATA_DIR "$SHARED_DIR/data"
+ensure_env NICOKARA_STORAGE_DIR "$SHARED_DIR/storage/jobs"
+# the public address is what this run was asked to serve
+set_env NICOKARA_ALLOWED_ORIGINS "$PUBLIC_ORIGIN"
+ensure_env NICOKARA_PROCESSING_ENABLED true
+ensure_env NICOKARA_FFMPEG_PATH ffmpeg
+ensure_env NICOKARA_WHISPER_MODEL "$SHARED_DIR/models/faster-whisper-small"
+ensure_env NICOKARA_WHISPER_DEVICE cpu
+ensure_env NICOKARA_WHISPER_COMPUTE_TYPE int8
+ensure_env NICOKARA_VOCAL_REMOVAL_BACKEND mdx
+ensure_env NICOKARA_VOCAL_REMOVAL_MODEL UVR_MDXNET_KARA_2.onnx
+ensure_env NICOKARA_VOCAL_REMOVAL_MODEL_DIR "$SHARED_DIR/models/audio-separator"
+ensure_env NICOKARA_DEEPSEEK_API_KEY ""
+# A shared server: visitors must not see each other's job ids, and must not
+# be able to make this machine download videos.
+ensure_env NICOKARA_JOB_LISTING_ENABLED false
+ensure_env NICOKARA_VIDEO_URL_HOSTS ""
 NICOKARA_DATA_DIR=$SHARED_DIR/data
 NICOKARA_STORAGE_DIR=$SHARED_DIR/storage/jobs
 NICOKARA_ALLOWED_ORIGINS=$PUBLIC_ORIGIN

@@ -8,6 +8,16 @@
 - Whisper 模型单独上传，只在首次部署时传输。
 - 后端 Python 依赖必须在 Linux 服务器安装，因为 macOS `.venv` 不能用于 Linux。
 
+## 部署前先看：这套部署适合谁
+
+本项目**没有用户账号，也没有任务权限隔离**：任务 ID 是访问一个任务的唯一凭据，拿到 ID 的人可以查看、下载、修改时间轴和读音，并让服务器重新对齐、重新渲染。因此：
+
+- 适合放在内网，或者只给小圈子使用。对外开放时，请至少在 Nginx 上加一层 HTTP Basic 认证（`auth_basic`），并尽量配置 HTTPS；本文的脚本只配置了 HTTP，上传的视频和歌词是明文传输的。
+- 一键部署脚本默认写入两项面向共享服务器的设置：`NICOKARA_JOB_LISTING_ENABLED=false`（首页不再列出所有人的任务，否则任务 ID 形同公开）和 `NICOKARA_VIDEO_URL_HOSTS=`（关闭“用视频链接创建任务”，否则任何访客都能让服务器去下载视频，占用带宽和磁盘，并带来版权风险）。只有你自己用这台服务器时，可以在 `nicokara.env` 里改回来。
+- 核对界面的“AI 重新对齐”和“重试整首对齐”是同步执行的，一次约 1 分钟，不经过任务队列；多人同时使用会互相等待。
+- 这套流程部署出来的是 CPU 配置（Whisper `small`）。效果好得多的 GPU 组件（karatimer 等，见 README）不在脚本覆盖范围内，需要有 NVIDIA 显卡并按 README 手动安装到单独的虚拟环境，再在 `nicokara.env` 里填写对应的解释器路径。注意 karatimer 使用的模型仅限非商业用途。
+- 限流依据的客户端地址来自 Nginx 传递的 `X-Forwarded-For`。uvicorn 默认只信任来自本机（127.0.0.1）的这个请求头，正好对应本文的 Nginx 配置，不需要额外参数；如果反向代理在另一台机器上，需要给 uvicorn 加 `--forwarded-allow-ips`。
+
 ## 1. 本地构建
 
 项目要求 Node.js `>=22.13.0`，建议本地和服务器统一使用 Node.js 24。
@@ -109,8 +119,12 @@ scp \
 
 ssh root@SERVER_IP
 chmod +x /data/deploy-nicokara-from-data.sh
-/data/deploy-nicokara-from-data.sh http://SERVER_IP 20260731-01
+/data/deploy-nicokara-from-data.sh http://SERVER_IP
 ```
+
+脚本的参数是 `公开地址 [发布编号] [应用包路径]`：发布编号默认取当前时间，应用包默认取 `/data` 下最新的 `nicokara-app-*.tar.gz`。它用同目录的 `SHA256SUMS` 校验应用包，所以**每次打包生成的 `SHA256SUMS` 必须和应用包一起上传**；两个模型包只在首次部署时需要。
+
+重复部署不会覆盖已有的 `nicokara.env`：脚本只补上缺少的设置项，并把 `NICOKARA_ALLOWED_ORIGINS` 更新为本次的公开地址，手动填写的 DeepSeek Key 等会保留。
 
 ## 4. 准备服务器
 
@@ -195,7 +209,11 @@ NICOKARA_VOCAL_REMOVAL_BACKEND=mdx
 NICOKARA_VOCAL_REMOVAL_MODEL=UVR_MDXNET_KARA_2.onnx
 NICOKARA_VOCAL_REMOVAL_MODEL_DIR=/data/nicokara/shared/models/audio-separator
 NICOKARA_DEEPSEEK_API_KEY=
+NICOKARA_JOB_LISTING_ENABLED=false
+NICOKARA_VIDEO_URL_HOSTS=
 ```
+
+最后两项的含义见本文开头。安装后端依赖时建议使用 `.[ai,reading]`：`reading` 提供 OpenJTalk 形态分析，本机读音会准确得多。
 
 有域名和 HTTPS 时，必须把 `NICOKARA_ALLOWED_ORIGINS` 改为真实地址，例如
 `https://karaoke.example.com`。
@@ -317,6 +335,6 @@ sudo journalctl -u nicokara-frontend -n 100 --no-pager
 ## 10. 剩余边界
 
 - `faster-whisper-small` 和 `UVR_MDXNET_KARA_2.onnx` 均已放入独立的本地模型包，服务器运行时不需要下载这两个模型。
-- 保持 `NICOKARA_DEEPSEEK_API_KEY` 为空时，歌词读音处理使用本地 `pykakasi`，不会调用 DeepSeek API。
+- 保持 `NICOKARA_DEEPSEEK_API_KEY` 为空时，歌词读音在本机生成（装了 `reading` 附加项时用 OpenJTalk，否则用 `pykakasi`），不会调用 DeepSeek API。
 - 本地生成的 Python `.venv` 和 `frontend/node_modules` 不应上传，它们可能包含与操作系统或 CPU 架构相关的文件。
 - `npm ci` 当前报告 16 个依赖漏洞，其中 15 个为 high。不要直接执行可能引入破坏性升级的 `npm audit fix --force`，应单独评估依赖升级。

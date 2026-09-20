@@ -17,7 +17,7 @@ from app.alignment.refiner import QwenForcedAlignmentRefiner
 from app.core.config import Settings, get_settings
 from app.core.database import Database
 from app.core.rate_limit import UploadRateLimiter
-from app.schemas.jobs import HealthResponse
+from app.schemas.jobs import CapabilitiesResponse, HealthResponse
 from app.lyrics.processor import (
     DeepSeekLyricProcessor,
     LocalJapaneseLyricProcessor,
@@ -242,6 +242,17 @@ def create_app(
         )
         return response
     app.include_router(jobs_router, prefix=resolved_settings.api_prefix)
+
+    @app.get(
+        f"{resolved_settings.api_prefix}/capabilities",
+        response_model=CapabilitiesResponse,
+        tags=["health"],
+    )
+    def capabilities() -> CapabilitiesResponse:
+        return CapabilitiesResponse(
+            video_link_hosts=resolved_settings.video_url_host_list,
+            job_listing=resolved_settings.job_listing_enabled,
+        )
 
     @app.get("/health", response_model=HealthResponse, tags=["health"])
     def health() -> HealthResponse:

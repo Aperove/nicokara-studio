@@ -288,3 +288,50 @@ def test_a_failed_download_fails_the_job_at_the_download_stage(
         "DOWNLOADING_VIDEO",
         "VIDEO_DOWNLOAD_FAILED",
     )
+
+
+def test_a_shared_server_can_switch_off_links_and_the_job_list(
+    tmp_path: Path,
+) -> None:
+    settings = Settings(
+        data_dir=tmp_path / "data",
+        storage_dir=tmp_path / "jobs",
+        processing_enabled=False,
+        cleanup_enabled=False,
+        video_url_hosts="",
+        job_listing_enabled=False,
+    )
+    with TestClient(create_app(settings, runner=RecordingRunner())) as client:
+        capabilities = client.get("/api/v1/capabilities").json()
+        listing = client.get("/api/v1/jobs")
+        from_link = client.post(
+            "/api/v1/jobs",
+            data={
+                "video_url": "https://www.youtube.com/watch?v=abc123",
+                "lyrics_text": "あいうえお",
+            },
+        )
+        upload = client.post(
+            "/api/v1/jobs",
+            files={"video": ("song.mp4", fake_mp4(), "video/mp4")},
+            data={"lyrics_text": "あいうえお"},
+        )
+        # a job is still reachable by whoever holds its id
+        own_job = client.get(f"/api/v1/jobs/{upload.json()['id']}")
+
+    assert capabilities == {"video_link_hosts": [], "job_listing": False}
+    assert listing.status_code == 404
+    assert from_link.status_code == 422
+    assert "未开放视频链接" in from_link.json()["detail"]
+    assert upload.status_code == 201
+    assert own_job.status_code == 200
+
+
+def test_a_local_installation_offers_everything_by_default(tmp_path: Path) -> None:
+    with build_client(tmp_path, RecordingRunner()) as client:
+        capabilities = client.get("/api/v1/capabilities").json()
+
+    assert capabilities == {
+        "video_link_hosts": ["youtube.com", "youtu.be"],
+        "job_listing": True,
+    }

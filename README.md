@@ -226,7 +226,8 @@ storage/jobs/{job_id}/
 | `NICOKARA_MAX_UPLOADS_PER_HOUR` | `0` | 单来源每小时创建任务数；`0` 表示不限流 |
 | `NICOKARA_JOB_RETENTION_HOURS` | `24` | 已结束任务的保留时间，包含“等待核对”的任务 |
 | `NICOKARA_ALLOWED_ORIGINS` | `http://localhost:3200` | 允许的前端来源 |
-| `NICOKARA_VIDEO_URL_HOSTS` | `youtube.com,youtu.be` | 允许用链接创建任务的站点（含子域名），逗号分隔；其他地址一律拒绝 |
+| `NICOKARA_VIDEO_URL_HOSTS` | `youtube.com,youtu.be` | 允许用链接创建任务的站点（含子域名），逗号分隔；其他地址一律拒绝。留空则关闭链接方式，界面上不再显示 |
+| `NICOKARA_JOB_LISTING_ENABLED` | `true` | 首页是否列出最近任务。多人共用的服务器应设为 `false`：任务 ID 是访问任务的唯一凭据 |
 | `NICOKARA_VIDEO_COOKIES_FROM_BROWSER` | 空 | 让 yt-dlp 借用这个浏览器的登录状态（`chrome`、`edge`、`firefox` 等），个别视频需要登录才能观看时才需要。它会读取该浏览器的 cookie，默认关闭 |
 | `NICOKARA_KARATIMER_PYTHON` | 空 | 装有 karatimer 的 Python 解释器；留空则不启用整首强制对齐 |
 | `NICOKARA_VOCAL_STEM_PYTHON` | 空 | 装有 torch 和 audio-separator 的解释器；留空则不做间奏检测 |
@@ -248,11 +249,11 @@ storage/jobs/{job_id}/
 
 ## 接口
 
-所有接口位于 `/api/v1/jobs` 之下：
+任务接口位于 `/api/v1/jobs` 之下；另有 `GET /api/v1/capabilities` 返回本机开放了哪些功能（允许的视频站点、是否列出任务），界面据此隐藏未开放的部分。
 
 | 方法与路径 | 作用 |
 |---|---|
-| `GET /` | 最近任务列表（`limit`，最多 100） |
+| `GET /` | 最近任务列表（`limit`，最多 100）；关闭任务列表时返回 404 |
 | `POST /` | 创建任务：视频文件或 `video_url` 二选一、歌词、样式、是否先核对；`vocal_mode` 默认 `both`，也接受旧的 `on` / `off` |
 | `GET /{id}` | 任务状态与进度 |
 | `GET /{id}/result`、`/download` | 在线播放或下载成片；加 `?vocal=off` 取 OFF VOCAL 版 |
@@ -302,7 +303,9 @@ DEPLOYMENT_LOCAL_BUILD.md  构建、发布和无 Docker 部署指南
 需要注意：
 
 - **本项目没有用户账号和任务权限隔离**，知道任务 ID 就能访问和修改该任务，不应直接作为公开服务使用。
-- 在反向代理后面运行时，限流依据的客户端地址需要代理传递 `X-Forwarded-For`，并让 uvicorn 以 `--proxy-headers` 启动，否则所有用户会共用同一个地址。
+- 部署脚本默认关闭首页的任务列表和视频链接下载（`NICOKARA_JOB_LISTING_ENABLED=false`、`NICOKARA_VIDEO_URL_HOSTS=`）：前者避免访客看到彼此的任务 ID，后者避免任何访客都能让服务器去下载视频。界面会自动隐藏对应的部分。
+- 脚本覆盖的是 CPU 配置；GPU 组件需要另行安装。对外开放时请至少加一层 Nginx Basic 认证。
+- 限流依据的客户端地址来自代理传递的 `X-Forwarded-For`；uvicorn 默认只信任本机代理发来的这个请求头，代理在另一台机器上时需要加 `--forwarded-allow-ips`。
 - 上传大小的真正限制要靠 Nginx 的 `client_max_body_size`；后端的大小检查发生在请求体接收完成之后。
 
 ## 测试
@@ -317,7 +320,7 @@ npm.cmd test
 npm.cmd run build
 ```
 
-当前基线：后端 206 项测试；前端 8 个测试文件、43 项测试。类型检查中 `frontend/worker/index.ts` 有两个缺少 Cloudflare 类型定义的既有报错，与功能无关。
+当前基线：后端 208 项测试；前端 8 个测试文件、43 项测试。类型检查中 `frontend/worker/index.ts` 有两个缺少 Cloudflare 类型定义的既有报错，与功能无关。
 
 ## 与原项目的差异
 

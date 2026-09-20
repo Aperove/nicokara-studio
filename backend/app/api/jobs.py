@@ -152,6 +152,13 @@ async def create_job(
             detail="请上传视频文件，或填写视频链接（二选一）",
         )
     if video is None:
+        if not settings.video_url_host_list:
+            if lyrics_file:
+                await lyrics_file.close()
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="本服务未开放视频链接，请上传视频文件",
+            )
         try:
             source_url = validate_video_url(
                 video_url or "", settings.video_url_host_list
@@ -239,7 +246,12 @@ async def create_job(
 
 @router.get("", response_model=list[JobResponse])
 def list_jobs(request: Request, limit: int = 20) -> list[JobResponse]:
-    _, database = services(request)
+    settings, database = services(request)
+    if not settings.job_listing_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="本服务未开放任务列表",
+        )
     jobs = database.list_jobs(limit=max(1, min(limit, 100)))
     return [JobResponse.model_validate(job) for job in jobs]
 

@@ -176,6 +176,16 @@ async function jsonRequest<T>(
   return (await response.json()) as T;
 }
 
+export type Capabilities = {
+  /** Sites a job may be created from by link; empty when links are off. */
+  video_link_hosts: string[];
+  job_listing: boolean;
+};
+
+export function getCapabilities(): Promise<Capabilities> {
+  return jsonRequest<Capabilities>("/capabilities");
+}
+
 export function listJobs(limit = 20): Promise<Job[]> {
   return jsonRequest<Job[]>(`/jobs?limit=${limit}`);
 }

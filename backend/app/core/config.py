@@ -57,6 +57,9 @@ class Settings(BaseSettings):
     karatimer_timeout_seconds: int = 1800
     # Sites a job may be created from by link instead of by upload.
     video_url_hosts: str = "youtube.com,youtu.be"
+    # Job ids are the only thing standing between a visitor and someone
+    # else's job, so a shared server must not list them.
+    job_listing_enabled: bool = True
     # Optional: let yt-dlp read the login session of this browser (chrome,
     # edge, firefox, ...), for videos that need a signed-in viewer; off by default
     # because it reads that browser's cookies.

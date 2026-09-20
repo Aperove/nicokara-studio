@@ -1,28 +1,10 @@
-import { CreateJobForm } from "@/components/create-job-form";
-import { RecentJobs } from "@/components/recent-jobs";
-import { CREATE_COPY, HOME_COPY } from "@/lib/ui-copy";
+import { HomeWorkspace } from "@/components/home-workspace";
+import { HOME_COPY } from "@/lib/ui-copy";
 
 export default function Home() {
   return (
     <main className="mx-auto max-w-6xl px-5 py-8 sm:px-8 sm:py-10">
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_21rem] lg:items-start">
-        <section
-          aria-labelledby="create-heading"
-          className="rounded-2xl border bg-card/92 p-5 sm:p-7"
-        >
-          <h1 id="create-heading" className="font-display text-2xl font-bold">
-            {CREATE_COPY.heading}
-          </h1>
-          <p className="mb-6 mt-1.5 text-sm text-muted-foreground">
-            {HOME_COPY.introduction}
-          </p>
-          <CreateJobForm />
-        </section>
-
-        <aside className="lg:sticky lg:top-6">
-          <RecentJobs />
-        </aside>
-      </div>
+      <HomeWorkspace />
 
       <footer className="mt-10 flex justify-center border-t pt-5">
         <a

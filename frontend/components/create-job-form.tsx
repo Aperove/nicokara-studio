@@ -70,11 +70,12 @@ function SegmentButton({
   );
 }
 
-export function CreateJobForm() {
+export function CreateJobForm({ allowLinks = true }: { allowLinks?: boolean }) {
   const router = useRouter();
   const videoInput = useRef<HTMLInputElement>(null);
   const lyricsInput = useRef<HTMLInputElement>(null);
-  const [source, setSource] = useState<Source>("file");
+  const [chosenSource, setSource] = useState<Source>("file");
+  const source: Source = allowLinks ? chosenSource : "file";
   const [video, setVideo] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState("");
   const [lyricsText, setLyricsText] = useState("");
@@ -149,7 +150,7 @@ export function CreateJobForm() {
         <h2 id="source-heading" className="mb-2.5 text-sm font-semibold">
           {CREATE_COPY.sourceTitle}
         </h2>
-        <div className="mb-3 flex gap-2">
+        <div className={allowLinks ? "mb-3 flex gap-2" : "hidden"}>
           <SegmentButton
             active={source === "file"}
             disabled={submitting}

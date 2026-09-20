@@ -35,3 +35,10 @@ class JobResponse(BaseModel):
 class HealthResponse(BaseModel):
     status: str
 
+
+class CapabilitiesResponse(BaseModel):
+    """What this installation offers, so the interface can leave out the rest."""
+
+    video_link_hosts: list[str]
+    job_listing: bool
+

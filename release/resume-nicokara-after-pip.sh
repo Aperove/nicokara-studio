@@ -69,7 +69,39 @@ mkdir -p \
   "$SHARED_DIR/data" \
   "$SHARED_DIR/storage/jobs"
 
-cat >"$SHARED_DIR/nicokara.env" <<EOF
+# Settings are only added, never overwritten: a redeploy must not wipe a key
+# or a choice that was made on this server.
+ENV_FILE="$SHARED_DIR/nicokara.env"
+touch "$ENV_FILE"
+ensure_env() {
+  if ! grep -q "^$1=" "$ENV_FILE"; then
+    printf '%s=%s\n' "$1" "$2" >>"$ENV_FILE"
+  fi
+}
+set_env() {
+  if grep -q "^$1=" "$ENV_FILE"; then
+    sed -i "s|^$1=.*|$1=$2|" "$ENV_FILE"
+  else
+    printf '%s=%s\n' "$1" "$2" >>"$ENV_FILE"
+  fi
+}
+ensure_env NICOKARA_DATA_DIR "$SHARED_DIR/data"
+ensure_env NICOKARA_STORAGE_DIR "$SHARED_DIR/storage/jobs"
+# the public address is what this run was asked to serve
+set_env NICOKARA_ALLOWED_ORIGINS "$PUBLIC_ORIGIN"
+ensure_env NICOKARA_PROCESSING_ENABLED true
+ensure_env NICOKARA_FFMPEG_PATH ffmpeg
+ensure_env NICOKARA_WHISPER_MODEL "$SHARED_DIR/models/faster-whisper-small"
+ensure_env NICOKARA_WHISPER_DEVICE cpu
+ensure_env NICOKARA_WHISPER_COMPUTE_TYPE int8
+ensure_env NICOKARA_VOCAL_REMOVAL_BACKEND mdx
+ensure_env NICOKARA_VOCAL_REMOVAL_MODEL UVR_MDXNET_KARA_2.onnx
+ensure_env NICOKARA_VOCAL_REMOVAL_MODEL_DIR "$SHARED_DIR/models/audio-separator"
+ensure_env NICOKARA_DEEPSEEK_API_KEY ""
+# A shared server: visitors must not see each other's job ids, and must not
+# be able to make this machine download videos.
+ensure_env NICOKARA_JOB_LISTING_ENABLED false
+ensure_env NICOKARA_VIDEO_URL_HOSTS ""
 NICOKARA_DATA_DIR=$SHARED_DIR/data
 NICOKARA_STORAGE_DIR=$SHARED_DIR/storage/jobs
 NICOKARA_ALLOWED_ORIGINS=$PUBLIC_ORIGIN
