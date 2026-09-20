@@ -41,18 +41,16 @@ def romanize(reading: str) -> str:
 def line_units(line: LyricLine) -> list[dict[str, str]]:
     """One unit per lyric token that is actually sung.
 
-    Tokens without a reading (punctuation, spaces) cannot be aligned; their
-    text rides along with the next sung token so nothing is lost.
+    A unit is labelled with the token's kana reading, not its written form:
+    the timeline aligner turns transcript text back into moras, and reading
+    kanji a second time need not give the reading the lyrics carry.  Tokens
+    without a reading (punctuation, spaces) are not sung and are left out.
     """
     units: list[dict[str, str]] = []
-    pending = ""
     for token in line.tokens:
         reading = romanize(token.reading)
-        if not reading:
-            pending += token.surface
-            continue
-        units.append({"text": pending + token.surface, "reading": reading})
-        pending = ""
+        if reading:
+            units.append({"text": token.reading, "reading": reading})
     return units
 
 

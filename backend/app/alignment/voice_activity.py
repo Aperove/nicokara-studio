@@ -26,6 +26,11 @@ _EDGE_MARGIN_MS = 500
 _MIN_CAUGHT_MS = 500
 # How many neighbouring lines may be re-spread to make room.
 _MAX_NEIGHBOURS = 2
+# A slow song breathes for seconds between the phrases of one lyric line.
+# Such a line only dips into the rest; a line timed where nobody sings has
+# most of its length in it.  (Measured: 8-30% for pauses, 59-84% for lines
+# that really were misplaced.)
+_MIN_CAUGHT_SHARE = 0.4
 # Milliseconds per mora between which a line can plausibly be sung.
 _SINGABLE_PACE_MS = (90, 900)
 
@@ -87,6 +92,13 @@ def _overlap(line: AlignedLine, rest: Rest) -> int:
     return max(0, min(line.end_ms, rest[1]) - max(line.start_ms, rest[0]))
 
 
+def _is_caught(line: AlignedLine, core: Rest) -> bool:
+    overlap = _overlap(line, core)
+    return overlap >= _MIN_CAUGHT_MS and overlap >= _MIN_CAUGHT_SHARE * (
+        line.end_ms - line.start_ms
+    )
+
+
 def move_lines_out_of_rests(
     timeline: LyricTimeline,
     rests: list[Rest],
@@ -95,10 +107,10 @@ def move_lines_out_of_rests(
 ) -> tuple[LyricTimeline, list[int], list[int]]:
     """Re-place lyric lines that were timed where nobody sings.
 
-    Nobody pauses for seconds in the middle of a line, so a long rest is a
-    line boundary.  Lines caught in a rest are handed to the sung time before
-    or after it, whichever split keeps the singing pace most even, and spread
-    there in proportion to their length.
+    Lines caught in a rest are handed to the sung time before or after it,
+    whichever split keeps the singing pace most even, and spread there in
+    proportion to their length.  A line that merely pauses for a rest, with
+    most of its length sung outside it, is left alone.
 
     Returns the new timeline, the indexes that moved, and the indexes that
     are still inside a rest because no plausible place was found for them.
@@ -112,7 +124,7 @@ def move_lines_out_of_rests(
         stuck = [
             index
             for index, line in enumerate(lines)
-            if _overlap(line, core) >= _MIN_CAUGHT_MS
+            if _is_caught(line, core)
         ]
         if not stuck:
             continue

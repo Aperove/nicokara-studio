@@ -55,9 +55,21 @@ def test_unsung_tokens_ride_along_with_the_next_sung_one() -> None:
     )
 
     assert line_units(line) == [
-        {"text": "「あい", "reading": "ai"},
-        {"text": "」、うえ", "reading": "ue"},
+        {"text": "あい", "reading": "ai"},
+        {"text": "うえ", "reading": "ue"},
     ]
+
+
+def test_units_carry_the_lyric_reading_rather_than_the_written_form() -> None:
+    # Reading the kanji again could give しょうがい; the lyrics say いきがい.
+    line = LyricLine(
+        source="生涯",
+        surface="生涯",
+        reading="いきがい",
+        tokens=[LyricToken("生涯", "いきがい")],
+    )
+
+    assert line_units(line) == [{"text": "いきがい", "reading": "ikigai"}]
 
 
 FAKE_WORKER = """

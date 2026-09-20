@@ -351,3 +351,20 @@ def test_timeline_respects_rests_only_with_a_clean_stem(tmp_path: Path) -> None:
     assert notes["moved_lines"] == [2]
     assert notes["unresolved_lines"] == []
     assert any(abs(start - 14_000) <= 400 for start, _ in notes["rests"])
+
+
+def test_a_line_that_pauses_between_its_phrases_is_left_alone() -> None:
+    # A slow song: the second line is sung 10-13 s, breathes, and goes on
+    # 16-20 s.  The rest is inside the line, not a place it strayed into.
+    timeline = LyricTimelineAligner().align(
+        lyrics_of(ROWS[:2]),
+        transcript_of([(ROWS[0], 4_000), (ROWS[1], 10_000)], step_ms=2_000),
+    )
+    before = [(line.start_ms, line.end_ms) for line in timeline.lines]
+
+    repaired, moved, unresolved = move_lines_out_of_rests(
+        timeline, [(13_000, 16_000)], duration_ms=40_000
+    )
+
+    assert (moved, unresolved) == ([], [])
+    assert [(line.start_ms, line.end_ms) for line in repaired.lines] == before
