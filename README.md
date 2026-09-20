@@ -4,7 +4,7 @@
 
 自动对齐之后、合成视频之前，可以在浏览器里边听边核对：拖动波形上的句子、修正读音、让 AI 重新对齐改过的句子，确认无误再渲染。
 
-> **本仓库 fork 自 [Xuan-cc/nicokara-studio](https://github.com/Xuan-cc/nicokara-studio)。**
+> **原项目由 esr 开发**，原仓库为 `delete039/nicokara-studio`（现已删除）。本仓库 fork 自保留了原项目代码的 [Xuan-cc/nicokara-studio](https://github.com/Xuan-cc/nicokara-studio)。
 > 上传、识别、歌词处理、ASS 字幕、视频合成和部署脚本这条处理闭环来自原项目。本 fork 在此基础上面向本地制作做了扩展：调整了歌词对齐，接入了强制对齐模型，并实现了原项目规划中的时间轴核对、字幕预览和样式编辑等功能。详见[与原项目的差异](#与原项目的差异)。
 
 ## 目录
@@ -314,7 +314,7 @@ npm.cmd test
 npm.cmd run build
 ```
 
-当前基线：后端 203 项测试；前端 8 个测试文件、43 项测试。类型检查中 `frontend/worker/index.ts` 有两个缺少 Cloudflare 类型定义的既有报错，与功能无关。
+当前基线：后端 205 项测试；前端 8 个测试文件、43 项测试。类型检查中 `frontend/worker/index.ts` 有两个缺少 Cloudflare 类型定义的既有报错，与功能无关。
 
 ## 与原项目的差异
 
@@ -361,7 +361,8 @@ npm.cmd run build
 
 ## 来源、致谢与许可
 
-- **原项目**：[Xuan-cc/nicokara-studio](https://github.com/Xuan-cc/nicokara-studio)。本仓库是它的 fork，整体架构、处理流程和部署脚本均来自原项目。
+- **原项目**：作者 esr，原仓库 `delete039/nicokara-studio`（现已删除，最初的提交记录仍保留在本仓库的历史中）。整体架构、处理流程和部署脚本均来自原项目。
+- **fork 来源**：[Xuan-cc/nicokara-studio](https://github.com/Xuan-cc/nicokara-studio) 保留了原项目的代码，本仓库是从它 fork 而来的。
 - **整首强制对齐**来自 [Jerry-at-GH/karatimer](https://github.com/Jerry-at-GH/karatimer)（Apache-2.0）。本项目只在运行时调用它，没有包含它的代码。它使用的 [NextFire/mms-300m-ForcedAligner-karaoke-ja-Latn](https://huggingface.co/NextFire/mms-300m-ForcedAligner-karaoke-ja-Latn) 模型为 CC-BY-NC-SA-4.0（非商用）。
 - **其他开源组件与模型**：[faster-whisper](https://github.com/SYSTRAN/faster-whisper)、[Qwen3-ASR / Qwen3-ForcedAligner](https://github.com/QwenLM/Qwen3-ASR)、[audio-separator](https://github.com/nomadkaraoke/python-audio-separator) 与 UVR 社区的 MDX-Net、Roformer 模型、[pyopenjtalk-plus](https://github.com/tsukumijima/pyopenjtalk-plus)（OpenJTalk）、[pykakasi](https://codeberg.org/miurahr/pykakasi)、[yt-dlp](https://github.com/yt-dlp/yt-dlp)、FFmpeg、libass。各组件和模型遵循其各自的许可证。
 
