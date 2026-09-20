@@ -250,13 +250,14 @@ export function TimelineReview({
   const [style, setStyle] = useState<SubtitleStyle>(DEFAULT_SUBTITLE_STYLE);
   const [styleDirty, setStyleDirty] = useState(false);
   const [styleOpen, setStyleOpen] = useState(false);
-  const [expanded, setExpanded] = useState(true);
+  // null follows the window size; a person's own choice overrides it
+  const [expanded, setExpanded] = useState<boolean | null>(null);
   const canExpand = useSyncExternalStore(
     subscribeToWorkbenchQuery,
     () => window.matchMedia(WORKBENCH_QUERY).matches,
     () => false,
   );
-  const wide = expanded && canExpand && review !== null;
+  const wide = (expanded ?? canExpand) && review !== null;
   const listRef = useRef<HTMLOListElement | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<ErrorFeedback | null>(null);
@@ -1102,16 +1103,14 @@ export function TimelineReview({
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         {heading}
-        {canExpand && (
-          <button
-            type="button"
-            onClick={() => toggleWorkbench(true)}
-            className="focus-ring inline-flex items-center gap-1.5 rounded-lg border bg-card px-3 py-1.5 text-sm font-semibold transition hover:bg-muted"
-          >
-            <Maximize2 className="size-4" />
-            {REVIEW_COPY.workbenchEnter}
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={() => toggleWorkbench(true)}
+          className="focus-ring inline-flex items-center gap-1.5 rounded-lg border bg-card px-3 py-1.5 text-sm font-semibold transition hover:bg-muted"
+        >
+          <Maximize2 className="size-4" />
+          {REVIEW_COPY.workbenchEnter}
+        </button>
       </div>
       <p className="mt-2 text-sm text-muted-foreground">
         {REVIEW_COPY.description}
