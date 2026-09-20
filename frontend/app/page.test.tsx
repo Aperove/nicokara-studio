@@ -8,14 +8,11 @@ vi.mock("next/navigation", () => ({
 import Home from "./page";
 
 describe("Studio home page", () => {
-  it("shows the author and open-source contact information", () => {
+  it("links to the project on GitHub instead of listing contact details", () => {
     const html = renderToStaticMarkup(<Home />);
 
-    expect(html).toContain("qq：280475274");
-    expect(html).toContain("bilibili：esrgt");
-    expect(html).toContain("小红书：esr");
-    expect(html).toContain(
-      "项目已开源，欢迎关注项目更新进度，与错误反馈或修改建议",
-    );
+    expect(html).toContain('href="https://github.com/Aperove/nicokara-studio"');
+    expect(html).toContain("在 GitHub 上查看本项目");
+    expect(html).not.toContain("qq：");
   });
 });
