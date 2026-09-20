@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI
@@ -10,6 +12,8 @@ from app.api.jobs import router as jobs_router
 from app.ai.deepseek import DeepSeekClient
 from app.ai.whisper import FasterWhisperTranscriber
 from app.alignment.aligner import LyricTimelineAligner
+from app.alignment.karatimer_aligner import KaratimerAligner
+from app.alignment.refiner import QwenForcedAlignmentRefiner
 from app.core.config import Settings, get_settings
 from app.core.database import Database
 from app.core.rate_limit import UploadRateLimiter
@@ -24,9 +28,59 @@ from app.tasks.runner import LocalTaskRunner
 from app.tasks.cleanup import JobCleanupService, PeriodicCleanupRunner
 from app.subtitle.ass_generator import AssGenerator
 from app.video.audio import FFmpegAudioExtractor
+from app.video.download import YtDlpVideoDownloader
 from app.video.rendering import FFmpegVideoRenderer
 from app.vocal.mdx import MDXNetVocalRemover
 from app.vocal.remover import VocalRemover
+from app.vocal.roformer import RoformerVocalStemSeparator
+
+
+def expose_ffmpeg_on_path(ffmpeg_path: str) -> None:
+    """Let libraries that shell out to a bare ``ffmpeg`` find ours.
+
+    audio-separator (and pydub underneath it) ignore NICOKARA_FFMPEG_PATH
+    and run ``ffmpeg`` from PATH, which fails when only an explicit binary
+    path is configured.
+    """
+    candidate = Path(ffmpeg_path)
+    if not candidate.is_file():
+        return
+    directory = str(candidate.resolve().parent)
+    entries = os.environ.get("PATH", "").split(os.pathsep)
+    if directory not in entries:
+        os.environ["PATH"] = os.pathsep.join([directory, *entries])
+
+
+def build_alignment_refiner(settings: Settings):
+    if settings.forced_aligner_python is None:
+        return None
+    return QwenForcedAlignmentRefiner(
+        python_command=(str(settings.forced_aligner_python),),
+        model=settings.forced_aligner_model,
+        device=settings.forced_aligner_device,
+        timeout_seconds=settings.forced_aligner_timeout_seconds,
+    )
+
+
+def build_primary_aligner(settings: Settings):
+    if settings.karatimer_python is None:
+        return None
+    return KaratimerAligner(
+        python_command=(str(settings.karatimer_python),),
+        device=settings.karatimer_device,
+        timeout_seconds=settings.karatimer_timeout_seconds,
+    )
+
+
+def build_vocal_stem_separator(settings: Settings):
+    if settings.vocal_stem_python is None:
+        return None
+    return RoformerVocalStemSeparator(
+        python_command=(str(settings.vocal_stem_python),),
+        model_dir=settings.vocal_removal_model_dir,
+        model=settings.vocal_stem_model,
+        timeout_seconds=settings.vocal_stem_timeout_seconds,
+    )
 
 
 def build_vocal_remover(settings: Settings):
@@ -48,6 +102,7 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         resolved_settings.prepare_directories()
+        expose_ffmpeg_on_path(resolved_settings.ffmpeg_path)
         database = Database(resolved_settings.database_path)
         database.initialize()
         database.recover_interrupted_jobs()
@@ -106,6 +161,28 @@ def create_app(
                         preset=resolved_settings.video_render_preset,
                         crf=resolved_settings.video_render_crf,
                     ),
+                    transcribe_vocal_stem=(
+                        resolved_settings.transcribe_vocal_stem
+                    ),
+                    lyrics_hint=resolved_settings.whisper_lyrics_hint,
+                    alignment_refiner=build_alignment_refiner(
+                        resolved_settings
+                    ),
+                    vocal_stem_separator=build_vocal_stem_separator(
+                        resolved_settings
+                    ),
+                    primary_aligner=build_primary_aligner(resolved_settings),
+                    video_downloader=YtDlpVideoDownloader(
+                        allowed_hosts=resolved_settings.video_url_host_list,
+                        ffmpeg_path=resolved_settings.ffmpeg_path,
+                        max_bytes=resolved_settings.max_video_bytes,
+                        timeout_seconds=(
+                            resolved_settings.video_download_timeout_seconds
+                        ),
+                        cookies_from_browser=(
+                            resolved_settings.video_cookies_from_browser
+                        ),
+                    ),
                 ),
                 max_pending_jobs=resolved_settings.max_pending_jobs,
             )
@@ -123,9 +200,10 @@ def create_app(
             for pending_job_id in database.list_job_ids(
                 status="UPLOADED"
             ):
-                if not getattr(active_runner, "can_accept", True):
-                    break
-                await active_runner.enqueue(pending_job_id)
+                if isinstance(active_runner, LocalTaskRunner):
+                    await active_runner.enqueue(pending_job_id, force=True)
+                elif getattr(active_runner, "can_accept", True):
+                    await active_runner.enqueue(pending_job_id)
         try:
             yield
         finally:
@@ -143,7 +221,7 @@ def create_app(
         CORSMiddleware,
         allow_origins=resolved_settings.cors_origins,
         allow_credentials=False,
-        allow_methods=["GET", "POST"],
+        allow_methods=["GET", "POST", "PUT"],
         allow_headers=["Content-Type"],
     )
 

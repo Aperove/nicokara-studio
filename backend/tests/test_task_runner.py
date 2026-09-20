@@ -55,3 +55,25 @@ def test_runner_rejects_more_pending_jobs_than_configured() -> None:
             await runner.enqueue("second")
 
     asyncio.run(scenario())
+
+
+def test_recovered_jobs_bypass_capacity_and_stop_does_not_drain_queue() -> None:
+    runner_module = importlib.import_module("app.tasks.runner")
+
+    class Pipeline:
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        def process(self, job_id: str) -> None:
+            self.calls.append(job_id)
+
+    async def scenario() -> list[str]:
+        pipeline = Pipeline()
+        runner = runner_module.LocalTaskRunner(pipeline, max_pending_jobs=1)
+        await runner.enqueue("first", force=True)
+        await runner.enqueue("second", force=True)
+        assert not runner.can_accept
+        await runner.stop()
+        return pipeline.calls
+
+    assert asyncio.run(scenario()) == []

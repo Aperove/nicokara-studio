@@ -28,3 +28,26 @@ class LyricDocument:
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> LyricDocument:
+        return cls(
+            provider=data["provider"],
+            source_text=data["source_text"],
+            warnings=list(data.get("warnings", [])),
+            lines=[
+                LyricLine(
+                    source=line["source"],
+                    surface=line["surface"],
+                    reading=line["reading"],
+                    tokens=[
+                        LyricToken(
+                            surface=token["surface"],
+                            reading=token["reading"],
+                        )
+                        for token in line.get("tokens", [])
+                    ],
+                )
+                for line in data.get("lines", [])
+            ],
+        )

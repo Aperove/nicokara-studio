@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import re
+import unicodedata
 
 from app.alignment.models import AlignedLine
 from app.alignment.japanese import normalize_reading
@@ -12,6 +13,16 @@ class RubyPlacement:
     text: str
     x: int
     y: int
+
+
+def text_width_units(text: str) -> float:
+    """Approximate rendered width in full-width character units."""
+    return sum(
+        1.0
+        if unicodedata.east_asian_width(character) in ("F", "W", "A")
+        else 0.55
+        for character in text
+    )
 
 
 def contains_kanji(text: str) -> bool:
@@ -79,28 +90,26 @@ def ruby_placements(
     center_x: int | None = None,
 ) -> list[RubyPlacement]:
     char_width = round(base_font_size * char_width_ratio)
-    line_width = len(line.surface) * char_width
+    line_width = text_width_units(line.surface) * char_width
     line_left = (center_x or play_res_x / 2) - line_width / 2
     placements: list[RubyPlacement] = []
-    character_offset = 0
+    offset_units = 0.0
     for token in line.tokens:
         for run_start, run_end, reading in kanji_readings(
             token.surface,
             token.reading,
         ):
+            run_centre_units = (
+                offset_units
+                + text_width_units(token.surface[:run_start])
+                + text_width_units(token.surface[run_start:run_end]) / 2
+            )
             placements.append(
                 RubyPlacement(
                     text=reading,
-                    x=round(
-                        line_left
-                        + (
-                            character_offset
-                            + (run_start + run_end) / 2
-                        )
-                        * char_width
-                    ),
+                    x=round(line_left + run_centre_units * char_width),
                     y=baseline_y - base_font_size // 2 - 2,
                 )
             )
-        character_offset += len(token.surface)
+        offset_units += text_width_units(token.surface)
     return placements

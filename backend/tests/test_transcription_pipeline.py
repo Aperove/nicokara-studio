@@ -29,7 +29,7 @@ class FakeTranscriber:
     def __init__(self) -> None:
         self.calls: list[Path] = []
 
-    def transcribe(self, audio_path: Path) -> TranscriptDocument:
+    def transcribe(self, audio_path: Path, **options) -> TranscriptDocument:
         self.calls.append(audio_path)
         return TranscriptDocument(
             language="ja",
@@ -119,7 +119,7 @@ def test_pipeline_marks_transcription_failure_in_database(tmp_path: Path) -> Non
     extractor = FakeExtractor()
 
     class FailingTranscriber:
-        def transcribe(self, audio_path: Path) -> TranscriptDocument:
+        def transcribe(self, audio_path: Path, **options) -> TranscriptDocument:
             raise RuntimeError("model could not load")
 
     pipeline = pipeline_module.TranscriptionPipeline(
@@ -669,7 +669,7 @@ def test_pipeline_does_not_expose_raw_exception_details(tmp_path: Path) -> None:
     job_id = create_uploaded_job(database, job_dir)
 
     class SecretFailingTranscriber:
-        def transcribe(self, audio_path: Path) -> TranscriptDocument:
+        def transcribe(self, audio_path: Path, **options) -> TranscriptDocument:
             raise RuntimeError("secret-token=C:/private/model")
 
     pipeline = pipeline_module.TranscriptionPipeline(
@@ -689,3 +689,96 @@ def test_pipeline_does_not_expose_raw_exception_details(tmp_path: Path) -> None:
         "Processing failed during audio transcription. "
         "Check server logs with this job ID."
     )
+
+
+class StemExtractor(FakeExtractor):
+    def __init__(self, *, stem_fails: bool = False) -> None:
+        super().__init__()
+        self.stem_fails = stem_fails
+
+    def extract_stereo(self, input_path: Path, output_path: Path) -> None:
+        output_path.write_bytes(b"stereo")
+
+    def extract_vocal_stem(
+        self,
+        mix_path: Path,
+        instrumental_path: Path,
+        output_path: Path,
+    ) -> None:
+        if self.stem_fails:
+            raise RuntimeError("ffmpeg filter failed")
+        output_path.write_bytes(b"vocals")
+
+
+class WritingVocalRemover:
+    def remove_vocals(self, input_path: Path, output_path: Path) -> None:
+        output_path.write_bytes(b"instrumental")
+
+
+class OptionRecordingTranscriber(FakeTranscriber):
+    def __init__(self) -> None:
+        super().__init__()
+        self.options: dict = {}
+
+    def transcribe(self, audio_path: Path, **options) -> TranscriptDocument:
+        self.options = options
+        options["on_progress"](0.5)
+        return super().transcribe(audio_path)
+
+
+def test_pipeline_transcribes_vocal_stem_with_lyrics_hint(
+    tmp_path: Path,
+) -> None:
+    pipeline_module = importlib.import_module("app.tasks.pipeline")
+    database = Database(tmp_path / "jobs.sqlite3")
+    database.initialize()
+    job_dir = tmp_path / "storage" / "job"
+    job_id = create_uploaded_job(database, job_dir)
+    lyrics_path = job_dir / "lyrics.txt"
+    lyrics_path.write_text("君の知らない\n物語\n", encoding="utf-8")
+    with database.connect() as connection:
+        connection.execute(
+            "UPDATE jobs SET lyrics_path = ? WHERE id = ?",
+            (str(lyrics_path), job_id),
+        )
+    transcriber = OptionRecordingTranscriber()
+
+    pipeline_module.TranscriptionPipeline(
+        database=database,
+        extractor=StemExtractor(),
+        transcriber=transcriber,
+        vocal_remover=WritingVocalRemover(),
+        transcribe_vocal_stem=True,
+        lyrics_hint=True,
+    ).process(job_id)
+
+    assert transcriber.calls == [job_dir / "audio_vocals.wav"]
+    assert transcriber.options["hotwords"] == "君の知らない 物語"
+    assert not (job_dir / "audio_stereo.wav").exists()
+    job = database.get_job(job_id)
+    assert job is not None
+    assert job["status"] == "TRANSCRIBED"
+
+
+def test_pipeline_falls_back_to_mix_when_vocal_stem_fails(
+    tmp_path: Path,
+) -> None:
+    pipeline_module = importlib.import_module("app.tasks.pipeline")
+    database = Database(tmp_path / "jobs.sqlite3")
+    database.initialize()
+    job_dir = tmp_path / "storage" / "job"
+    job_id = create_uploaded_job(database, job_dir)
+    transcriber = FakeTranscriber()
+
+    pipeline_module.TranscriptionPipeline(
+        database=database,
+        extractor=StemExtractor(stem_fails=True),
+        transcriber=transcriber,
+        vocal_remover=WritingVocalRemover(),
+        transcribe_vocal_stem=True,
+    ).process(job_id)
+
+    assert transcriber.calls == [job_dir / "audio.wav"]
+    job = database.get_job(job_id)
+    assert job is not None
+    assert job["status"] == "TRANSCRIBED"

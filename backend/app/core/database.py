@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     timeline_path TEXT,
     ass_path TEXT,
     output_path TEXT,
+    output_off_path TEXT,
     error_code TEXT,
     error_message TEXT,
     created_at TEXT NOT NULL,
@@ -70,6 +71,7 @@ class Database:
                 "timeline_path",
                 "ass_path",
                 "output_path",
+                "output_off_path",
             ):
                 if name not in columns:
                     connection.execute(f"ALTER TABLE jobs ADD COLUMN {name} TEXT")
@@ -144,6 +146,7 @@ class Database:
         timeline_path: Path | None = None,
         ass_path: Path | None = None,
         output_path: Path | None = None,
+        output_off_path: Path | None = None,
         error_code: str | None = None,
         error_message: str | None = None,
     ) -> None:
@@ -181,12 +184,51 @@ class Database:
         if output_path is not None:
             assignments.append("output_path = ?")
             values.append(str(output_path))
+            # Every render decides anew whether an off-vocal version exists.
+            assignments.append("output_off_path = ?")
+            values.append(str(output_off_path) if output_off_path else None)
         values.append(job_id)
 
         with self.connect() as connection:
             cursor = connection.execute(
                 f"UPDATE jobs SET {', '.join(assignments)} WHERE id = ?",
                 values,
+            )
+            if cursor.rowcount != 1:
+                raise KeyError(f"Job not found: {job_id}")
+
+    def list_jobs(self, *, limit: int = 20) -> list[dict]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM jobs ORDER BY created_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def update_job_video(
+        self,
+        job_id: str,
+        *,
+        original_video_name: str,
+        video_size_bytes: int,
+        video_sha256: str,
+    ) -> None:
+        """Record a video that arrived after the job was created."""
+        with self.connect() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE jobs
+                SET original_video_name = ?, video_size_bytes = ?,
+                    video_sha256 = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    original_video_name,
+                    video_size_bytes,
+                    video_sha256,
+                    utc_now(),
+                    job_id,
+                ),
             )
             if cursor.rowcount != 1:
                 raise KeyError(f"Job not found: {job_id}")
@@ -234,6 +276,7 @@ class Database:
             "LYRICS_PROCESSED",
             "ALIGNED",
             "SUBTITLE_GENERATED",
+            "AWAITING_REVIEW",
         )
         placeholders = ", ".join("?" for _ in terminal_statuses)
         with self.connect() as connection:

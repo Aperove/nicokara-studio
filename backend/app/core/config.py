@@ -35,6 +35,33 @@ class Settings(BaseSettings):
     whisper_model: str = "small"
     whisper_device: str = "cpu"
     whisper_compute_type: str = "int8"
+    whisper_lyrics_hint: bool = True
+    transcribe_vocal_stem: bool = True
+    # Optional forced alignment with Qwen3-ForcedAligner.  Set this to a
+    # Python interpreter that has torch and qwen-asr installed to enable it.
+    forced_aligner_python: Path | None = None
+    forced_aligner_model: str = "Qwen/Qwen3-ForcedAligner-0.6B"
+    forced_aligner_device: str = "cuda:0"
+    forced_aligner_timeout_seconds: int = 900
+    # Optional Roformer vocal stem, used for recognition, alignment and for
+    # finding interludes.  Needs an interpreter with torch and audio-separator.
+    vocal_stem_python: Path | None = None
+    vocal_stem_model: str = "vocals_mel_band_roformer.ckpt"
+    vocal_stem_timeout_seconds: int = 1800
+    # Optional whole-song forced alignment with karatimer.  When set, lyrics
+    # are aligned without any speech recognition; ASR is only the fallback.
+    # Needs an interpreter with karatimer installed.  Its alignment model is
+    # CC-BY-NC-SA-4.0: non-commercial use only.
+    karatimer_python: Path | None = None
+    karatimer_device: str | None = None
+    karatimer_timeout_seconds: int = 1800
+    # Sites a job may be created from by link instead of by upload.
+    video_url_hosts: str = "youtube.com,youtu.be"
+    # Optional: let yt-dlp read the login session of this browser (chrome,
+    # edge, firefox, ...), for videos that need a signed-in viewer; off by default
+    # because it reads that browser's cookies.
+    video_cookies_from_browser: str | None = None
+    video_download_timeout_seconds: int = 1800
     vocal_removal_backend: str = "mdx"
     vocal_removal_model: str = "UVR_MDXNET_KARA_2.onnx"
     vocal_removal_model_dir: Path = Field(
@@ -44,6 +71,20 @@ class Settings(BaseSettings):
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_model: str = "deepseek-v4-flash"
     deepseek_timeout_seconds: float = 60
+
+    @field_validator(
+        "forced_aligner_python",
+        "vocal_stem_python",
+        "karatimer_python",
+        "karatimer_device",
+        "video_cookies_from_browser",
+        mode="before",
+    )
+    @classmethod
+    def empty_forced_aligner_is_disabled(cls, value):
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
     @field_validator("deepseek_api_key", mode="before")
     @classmethod
@@ -108,6 +149,14 @@ class Settings(BaseSettings):
     @property
     def database_path(self) -> Path:
         return self.data_dir / "nicokara.sqlite3"
+
+    @property
+    def video_url_host_list(self) -> list[str]:
+        return [
+            host.strip().lower()
+            for host in self.video_url_hosts.split(",")
+            if host.strip()
+        ]
 
     @property
     def cors_origins(self) -> list[str]:

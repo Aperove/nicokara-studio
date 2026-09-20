@@ -45,8 +45,8 @@ class FFmpegVideoRenderer:
             vf_parts = []
             if self.pad_to_16_9:
                 vf_parts.append(
-                    "pad=w=max(iw\\,ih*16/9)"
-                    ":h=max(ih\\,iw*9/16)"
+                    "pad=w=ceil(max(iw\\,ih*16/9)/2)*2"
+                    ":h=ceil(max(ih\\,iw*9/16)/2)*2"
                     ":x=(ow-iw)/2"
                     ":y=(oh-ih)/2"
                     ":color=black"
@@ -114,3 +114,58 @@ class FFmpegVideoRenderer:
             output_path.unlink(missing_ok=True)
             detail = (exc.stderr or "FFmpeg exited with an error").strip()
             raise VideoRenderingError(detail[-2000:]) from exc
+        except subprocess.TimeoutExpired as exc:
+            output_path.unlink(missing_ok=True)
+            raise VideoRenderingError(
+                f"FFmpeg timed out after {self.timeout_seconds} seconds"
+            ) from exc
+
+    def replace_audio(
+        self,
+        video_path: Path,
+        audio_path: Path,
+        output_path: Path,
+    ) -> None:
+        """Copy the rendered picture and give it another soundtrack.
+
+        The off-vocal version differs from the rendered video only in its
+        audio, so the expensive subtitle burn-in is not repeated.
+        """
+        try:
+            subprocess.run(
+                [
+                    *self.command,
+                    "-y",
+                    "-i",
+                    str(video_path),
+                    "-i",
+                    str(audio_path),
+                    "-map",
+                    "0:v:0",
+                    "-map",
+                    "1:a:0",
+                    "-c:v",
+                    "copy",
+                    "-c:a",
+                    "aac",
+                    "-b:a",
+                    "192k",
+                    "-shortest",
+                    "-movflags",
+                    "+faststart",
+                    str(output_path),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=self.timeout_seconds,
+            )
+            if not output_path.is_file() or output_path.stat().st_size == 0:
+                raise VideoRenderingError("FFmpeg did not produce the off-vocal video")
+        except subprocess.CalledProcessError as exc:
+            output_path.unlink(missing_ok=True)
+            detail = (exc.stderr or "FFmpeg exited with an error").strip()
+            raise VideoRenderingError(detail[-2000:]) from exc
+        except (subprocess.TimeoutExpired, VideoRenderingError):
+            output_path.unlink(missing_ok=True)
+            raise

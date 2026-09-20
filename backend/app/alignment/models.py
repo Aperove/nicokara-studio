@@ -41,3 +41,34 @@ class LyricTimeline:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> LyricTimeline:
+        return cls(
+            confidence=float(data["confidence"]),
+            warnings=list(data.get("warnings", [])),
+            lines=[
+                AlignedLine(
+                    surface=line["surface"],
+                    reading=line["reading"],
+                    start_ms=int(line["start_ms"]),
+                    end_ms=int(line["end_ms"]),
+                    confidence=float(line["confidence"]),
+                    tokens=[
+                        AlignedToken(
+                            surface=token["surface"],
+                            reading=token["reading"],
+                            start_ms=int(token["start_ms"]),
+                            end_ms=int(token["end_ms"]),
+                            confidence=float(token["confidence"]),
+                            moras=[
+                                AlignedMora(**mora)
+                                for mora in token.get("moras", [])
+                            ],
+                        )
+                        for token in line.get("tokens", [])
+                    ],
+                )
+                for line in data.get("lines", [])
+            ],
+        )

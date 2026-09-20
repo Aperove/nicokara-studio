@@ -156,3 +156,16 @@ def test_user_text_is_escaped_in_every_visual_layer() -> None:
     content = module.AssGenerator().generate(timeline)
 
     assert r"\{\\N\}" in content
+
+
+def test_long_lines_shrink_to_fit_around_their_off_centre_slot() -> None:
+    module = importlib.import_module("app.subtitle.ass_generator")
+    text = "あ" * 20
+    content = module.AssGenerator().generate(
+        LyricTimeline(confidence=1.0, lines=[line(text, text, 1000, 5000)])
+    )
+
+    size = int(re.search(r"\\fs(\d+)", base_event(content, text)).group(1))
+    # The upper slot is centred at x=672, so half the line must fit in 672px.
+    assert len(text) * size * 0.68 / 2 <= 672
+    assert size >= 40

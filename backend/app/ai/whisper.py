@@ -39,8 +39,40 @@ class TranscriptDocument:
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> TranscriptDocument:
+        return cls(
+            language=data["language"],
+            language_probability=float(data["language_probability"]),
+            duration_seconds=float(data["duration_seconds"]),
+            text=data["text"],
+            segments=[
+                TranscriptSegment(
+                    id=int(segment["id"]),
+                    text=segment["text"],
+                    start_ms=int(segment["start_ms"]),
+                    end_ms=int(segment["end_ms"]),
+                    confidence=float(segment["confidence"]),
+                    no_speech_probability=float(
+                        segment["no_speech_probability"]
+                    ),
+                    words=[
+                        TranscriptWord(
+                            text=word["text"],
+                            start_ms=int(word["start_ms"]),
+                            end_ms=int(word["end_ms"]),
+                            confidence=float(word["confidence"]),
+                        )
+                        for word in segment.get("words", [])
+                    ],
+                )
+                for segment in data.get("segments", [])
+            ],
+        )
+
 
 ModelFactory = Callable[[str, str, str], Any]
+ProgressCallback = Callable[[float], None]
 
 
 def default_model_factory(model_name: str, device: str, compute_type: str):
@@ -74,7 +106,18 @@ class FasterWhisperTranscriber:
             )
         return self._model
 
-    def transcribe(self, audio_path: Path) -> TranscriptDocument:
+    def transcribe(
+        self,
+        audio_path: Path,
+        *,
+        hotwords: str | None = None,
+        on_progress: ProgressCallback | None = None,
+    ) -> TranscriptDocument:
+        options: dict[str, Any] = {}
+        if hotwords:
+            # Unlike initial_prompt, hotwords bias every 30 s window even
+            # with condition_on_previous_text disabled.
+            options["hotwords"] = hotwords
         raw_segments, info = self.model.transcribe(
             str(audio_path),
             language="ja",
@@ -82,9 +125,13 @@ class FasterWhisperTranscriber:
             vad_filter=False,
             word_timestamps=True,
             condition_on_previous_text=False,
+            **options,
         )
+        duration = float(info.duration or 0.0)
         segments: list[TranscriptSegment] = []
         for raw_segment in raw_segments:
+            if on_progress is not None and duration > 0:
+                on_progress(min(1.0, float(raw_segment.end) / duration))
             words = [
                 TranscriptWord(
                     text=word.word.strip(),

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, replace
 
 from app.alignment.models import AlignedLine, LyricTimeline
@@ -9,7 +8,7 @@ from app.subtitle.karaoke_effect import (
     line_chunks,
     render_karaoke,
 )
-from app.subtitle.ruby import ruby_placements
+from app.subtitle.ruby import ruby_placements, text_width_units
 
 _CHAR_WIDTH_RATIO = 0.68
 
@@ -33,17 +32,9 @@ class AssConfig:
     unsung_color: str = "&H00000000"
     outline_color: str = "&H00FFFFFF"
     max_line_width_ratio: float = 0.92
-    upper_slot_x_ratio: float = 0.35
-    upper_slot_y_ratio: float = 0.62
-    lower_slot_x_ratio: float = 0.65
-    lower_slot_y_ratio: float = 0.78
-    fade_in_ms: int = 180
-    fade_out_ms: int = 220
-    section_lead_ms: int = 3000
-    long_interlude_ms: int = 12000
-    sung_color: str = "&H000000FF"
-    unsung_color: str = "&H00000000"
-    outline_color: str = "&H00FFFFFF"
+    glow_color: str = "&H400000FF"
+    show_ruby: bool = True
+    glow: bool = True
 
 
 @dataclass(frozen=True)
@@ -63,56 +54,11 @@ def ass_time(milliseconds: int) -> str:
 class AssGenerator:
     def __init__(self, *, config: AssConfig | None = None) -> None:
         self.config = config or AssConfig()
-        self.slots = (
-            FixedSlot(
-                x=round(
-                    self.config.play_res_x
-                    * self.config.upper_slot_x_ratio
-                ),
-                y=round(
-                    self.config.play_res_y
-                    * self.config.upper_slot_y_ratio
-                ),
-            ),
-            FixedSlot(
-                x=round(
-                    self.config.play_res_x
-                    * self.config.lower_slot_x_ratio
-                ),
-                y=round(
-                    self.config.play_res_y
-                    * self.config.lower_slot_y_ratio
-                ),
-            ),
-        )
+        self.slots = self._slots(self.config)
 
-    def _auto_font_size(self, timeline: LyricTimeline) -> tuple[int, int]:
-        """Pick base_font_size so the longest line fits within play_res_x."""
-        max_chars = max(
-            (len(line.surface) for line in timeline.lines),
-            default=10,
-        )
-        available_px = round(
-            self.config.play_res_x * self.config.max_line_width_ratio
-        )
-        max_size = max(40, available_px // max(1, round(max_chars * _CHAR_WIDTH_RATIO)))
-        base = min(max_size, self.config.base_font_size)
-        if base < 60:
-            base = max(40, base)
-        ruby = max(20, round(base * 0.40))
-        return base, ruby
-
-    def generate(self, timeline: LyricTimeline) -> str:
-        auto_base, auto_ruby = self._auto_font_size(timeline)
-        config = replace(
-            self.config,
-            base_font_size=auto_base,
-            ruby_font_size=auto_ruby,
-        )
-        # temporary override so helper methods use the auto-sized values
-        saved_config = self.config
-        self.config = config
-        self.slots = (
+    @staticmethod
+    def _slots(config: AssConfig) -> tuple[FixedSlot, FixedSlot]:
+        return (
             FixedSlot(
                 x=round(config.play_res_x * config.upper_slot_x_ratio),
                 y=round(config.play_res_y * config.upper_slot_y_ratio),
@@ -122,10 +68,42 @@ class AssGenerator:
                 y=round(config.play_res_y * config.lower_slot_y_ratio),
             ),
         )
-        try:
-            return self._generate_events(timeline)
-        finally:
-            self.config = saved_config
+
+    def _auto_font_size(self, timeline: LyricTimeline) -> tuple[int, int]:
+        """Pick base_font_size so every line fits around its centred slot."""
+        base = self.config.base_font_size
+        for line_index, line in enumerate(timeline.lines):
+            slot = self.slots[line_index % 2]
+            # A line is centred on its slot, so the usable width is twice
+            # the distance from the slot to the nearest frame edge.
+            available_px = (
+                2
+                * min(slot.x, self.config.play_res_x - slot.x)
+                * self.config.max_line_width_ratio
+            )
+            units = max(1.0, text_width_units(line.surface))
+            base = min(base, int(available_px / (units * _CHAR_WIDTH_RATIO)))
+        base = max(40, base)
+        ruby = max(20, round(base * 0.40))
+        return base, ruby
+
+    def generate(
+        self,
+        timeline: LyricTimeline,
+        *,
+        config: AssConfig | None = None,
+    ) -> str:
+        if config is not None:
+            return AssGenerator(config=config).generate(timeline)
+        auto_base, auto_ruby = self._auto_font_size(timeline)
+        sized = AssGenerator(
+            config=replace(
+                self.config,
+                base_font_size=auto_base,
+                ruby_font_size=auto_ruby,
+            )
+        )
+        return sized._generate_events(timeline)
 
     def _generate_events(self, timeline: LyricTimeline) -> str:
         events: list[str] = []
@@ -153,14 +131,15 @@ class AssGenerator:
                     text=escape_ass_text(line.surface),
                 )
             )
-            events.extend(
-                self._ruby_events(
-                    line,
-                    slot,
-                    display_start,
-                    display_end,
+            if self.config.show_ruby:
+                events.extend(
+                    self._ruby_events(
+                        line,
+                        slot,
+                        display_start,
+                        display_end,
+                    )
                 )
-            )
 
             karaoke = render_karaoke(line_chunks(line))
             events.append(
@@ -173,6 +152,8 @@ class AssGenerator:
                     text=karaoke,
                 )
             )
+            if not self.config.glow:
+                continue
             events.append(
                 self._dialogue(
                     layer=4,
@@ -295,7 +276,7 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
 Style: LyricBase,{self.config.font_name},{self.config.base_font_size},{self.config.unsung_color},{self.config.unsung_color},{self.config.outline_color},&H60000000,-1,0,0,0,100,100,0,0,1,5,2,5,40,40,40,1
 Style: Ruby,{self.config.font_name},{self.config.ruby_font_size},{self.config.unsung_color},{self.config.unsung_color},{self.config.outline_color},&H60000000,-1,0,0,0,100,100,0,0,1,3,1,5,20,20,20,1
 Style: Highlight,{self.config.font_name},{self.config.base_font_size},{self.config.sung_color},&HFF000000,&HFF000000,&HFF000000,-1,0,0,0,100,100,0,0,1,0,0,5,40,40,40,1
-Style: Glow,{self.config.font_name},{self.config.base_font_size},&H400000FF,&HFF000000,&H400000FF,&HFF000000,-1,0,0,0,100,100,0,0,1,4,0,5,40,40,40,1
+Style: Glow,{self.config.font_name},{self.config.base_font_size},{self.config.glow_color},&HFF000000,{self.config.glow_color},&HFF000000,-1,0,0,0,100,100,0,0,1,4,0,5,40,40,40,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"""
