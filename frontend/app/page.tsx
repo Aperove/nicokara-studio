@@ -1,80 +1,40 @@
-import { FileUp, Zap, Download } from "lucide-react";
-
-import { UploadForm } from "@/components/upload-form";
-import { HOME_COPY } from "@/lib/ui-copy";
-
-const steps = [
-  {
-    icon: FileUp,
-    ...HOME_COPY.steps[0],
-  },
-  {
-    icon: Zap,
-    ...HOME_COPY.steps[1],
-  },
-  {
-    icon: Download,
-    ...HOME_COPY.steps[2],
-  },
-];
+import { CreateJobForm } from "@/components/create-job-form";
+import { RecentJobs } from "@/components/recent-jobs";
+import { CREATE_COPY, HOME_COPY } from "@/lib/ui-copy";
 
 export default function Home() {
   return (
-    <main>
-      <section className="mx-auto grid max-w-6xl gap-12 px-5 py-12 sm:px-8 sm:py-16 lg:grid-cols-[0.9fr_1.1fr] lg:items-start lg:py-24">
-        <div className="lg:sticky lg:top-10">
-          <h1 className="font-display text-4xl font-bold leading-tight tracking-tight sm:text-6xl">
-            ニコカラ
-            <br />
-            自动生成器
+    <main className="mx-auto max-w-6xl px-5 py-8 sm:px-8 sm:py-10">
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_21rem] lg:items-start">
+        <section
+          aria-labelledby="create-heading"
+          className="rounded-2xl border bg-card/92 p-5 sm:p-7"
+        >
+          <h1 id="create-heading" className="font-display text-2xl font-bold">
+            {CREATE_COPY.heading}
           </h1>
-          <p className="mt-7 max-w-xl text-base leading-8 text-muted-foreground sm:text-lg">
-            喜欢的歌太冷门，找不到ニコカラ版本？
-            <br />
+          <p className="mb-6 mt-1.5 text-sm text-muted-foreground">
             {HOME_COPY.introduction}
           </p>
+          <CreateJobForm />
+        </section>
 
-          <ol className="mt-10 space-y-5">
-            {steps.map((step) => (
-              <li key={step.title} className="flex gap-4">
-                <div className="flex size-10 shrink-0 items-center justify-center rounded-full border bg-card">
-                  <step.icon className="size-4 text-primary" />
-                </div>
-                <div>
-                  <p className="font-medium">{step.title}</p>
-                  <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                    {step.text}
-                  </p>
-                </div>
-              </li>
-            ))}
-          </ol>
+        <aside className="lg:sticky lg:top-6">
+          <RecentJobs />
+        </aside>
+      </div>
 
-          <a
-            href="#upload-form"
-            className="mt-10 inline-block text-lg font-semibold text-primary hover:underline"
-          >
-            {HOME_COPY.callToAction} →
-          </a>
-
-          <aside
-            aria-label="作者信息"
-            className="mt-8 border-t pt-5 text-xs leading-6 text-muted-foreground"
-          >
-            <p>qq：{HOME_COPY.author.qq}</p>
-            <p>bilibili：{HOME_COPY.author.bilibili}</p>
-            <p>小红书：{HOME_COPY.author.xiaohongshu}</p>
-            <p className="mt-2 max-w-md">{HOME_COPY.author.message}</p>
-          </aside>
-        </div>
-
-        <div
-          id="upload-form"
-          className="rounded-3xl border bg-card/92 p-5 shadow-[0_24px_80px_-48px_color-mix(in_oklab,var(--color-foreground)_45%,transparent)] sm:p-8"
-        >
-          <UploadForm />
-        </div>
-      </section>
+      <footer
+        aria-label="作者信息"
+        className="mt-10 border-t pt-4 text-xs leading-6 text-muted-foreground"
+      >
+        <p className="flex flex-wrap gap-x-5">
+          <span>qq：{HOME_COPY.author.qq}</span>
+          <span>bilibili：{HOME_COPY.author.bilibili}</span>
+          <span>小红书：{HOME_COPY.author.xiaohongshu}</span>
+        </p>
+        <p>{HOME_COPY.author.message}</p>
+      </footer>
     </main>
   );
 }

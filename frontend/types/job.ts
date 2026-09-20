@@ -7,6 +7,9 @@ export type Job = {
   video_size_bytes: number;
   video_sha256: string;
   lyrics_source: "text" | "file" | null;
+  vocal_mode?: "on" | "off" | "both";
+  /** An instrumental (off-vocal) version was rendered as well. */
+  off_vocal_available?: boolean;
   error_code: string | null;
   error_message: string | null;
   created_at: string;

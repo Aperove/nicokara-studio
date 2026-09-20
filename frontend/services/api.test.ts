@@ -81,3 +81,15 @@ describe("getJob", () => {
     }
   });
 });
+
+describe("off-vocal video URLs", () => {
+  it("only the off-vocal version carries a query parameter", async () => {
+    const { downloadVideoUrl, resultVideoUrl } = await import("./api");
+
+    expect(resultVideoUrl("abc")).not.toContain("?");
+    expect(resultVideoUrl("abc", "off")).toMatch(/\/jobs\/abc\/result\?vocal=off$/);
+    expect(downloadVideoUrl("abc", "off")).toMatch(
+      /\/jobs\/abc\/download\?vocal=off$/,
+    );
+  });
+});

@@ -1,4 +1,6 @@
 import type { Job } from "@/types/job";
+import type { SubtitleStyle } from "@/types/style";
+import type { LineEdit, Review, Timeline } from "@/types/timeline";
 import {
   httpErrorFeedback,
   networkErrorFeedback,
@@ -9,10 +11,14 @@ import {
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "/api/v1";
 
 type CreateJobInput = {
-  video: File;
+  /** Exactly one of `video` and `videoUrl` is given. */
+  video?: File;
+  videoUrl?: string;
   lyricsText?: string;
   lyricsFile?: File;
   vocalMode?: string;
+  style?: SubtitleStyle;
+  review?: boolean;
 };
 
 export class ApiRequestError extends Error {
@@ -72,7 +78,11 @@ export function createJob(
 ): Promise<Job> {
   return new Promise((resolve, reject) => {
     const data = new FormData();
-    data.append("video", input.video);
+    if (input.video) {
+      data.append("video", input.video);
+    } else if (input.videoUrl?.trim()) {
+      data.append("video_url", input.videoUrl.trim());
+    }
     if (input.lyricsText?.trim()) {
       data.append("lyrics_text", input.lyricsText.trim());
     }
@@ -81,6 +91,12 @@ export function createJob(
     }
     if (input.vocalMode) {
       data.append("vocal_mode", input.vocalMode);
+    }
+    if (input.style) {
+      data.append("style", JSON.stringify(input.style));
+    }
+    if (input.review) {
+      data.append("review", "true");
     }
 
     const xhr = new XMLHttpRequest();
@@ -129,6 +145,92 @@ export async function getJob(jobId: string): Promise<Job> {
   return (await response.json()) as Job;
 }
 
+async function jsonRequest<T>(
+  path: string,
+  init?: RequestInit,
+): Promise<T> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      cache: "no-store",
+      ...init,
+    });
+  } catch {
+    throw connectionError("job");
+  }
+  if (!response.ok) {
+    throw new ApiRequestError(
+      httpErrorFeedback(
+        "job",
+        response.status,
+        await fetchResponseDetail(response),
+        retryAfterSeconds(response.headers.get("Retry-After")),
+      ),
+    );
+  }
+  return (await response.json()) as T;
+}
+
+export function listJobs(limit = 20): Promise<Job[]> {
+  return jsonRequest<Job[]>(`/jobs?limit=${limit}`);
+}
+
+export function getJobStyle(jobId: string): Promise<SubtitleStyle> {
+  return jsonRequest<SubtitleStyle>(`/jobs/${jobId}/style`);
+}
+
+export function restyleJob(
+  jobId: string,
+  style: SubtitleStyle,
+): Promise<Job> {
+  return jsonRequest<Job>(`/jobs/${jobId}/restyle`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(style),
+  });
+}
+
+export function getReview(jobId: string): Promise<Review> {
+  return jsonRequest<Review>(`/jobs/${jobId}/review`);
+}
+
+export function saveTimeline(
+  jobId: string,
+  lines: LineEdit[],
+): Promise<{ timeline: Timeline }> {
+  return jsonRequest<{ timeline: Timeline }>(`/jobs/${jobId}/timeline`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ lines }),
+  });
+}
+
+export function refineTimelineLines(
+  jobId: string,
+  lines: number[],
+): Promise<{ timeline: Timeline; refined_lines: number[] }> {
+  return jsonRequest<{ timeline: Timeline; refined_lines: number[] }>(
+    `/jobs/${jobId}/timeline/refine`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lines }),
+    },
+  );
+}
+
+export function renderJob(jobId: string): Promise<Job> {
+  return jsonRequest<Job>(`/jobs/${jobId}/render`, { method: "POST" });
+}
+
+export function sourceVideoUrl(jobId: string): string {
+  return `${API_BASE}/jobs/${jobId}/source`;
+}
+
+export function audioTrackUrl(jobId: string, track: "mix" | "vocals"): string {
+  return `${API_BASE}/jobs/${jobId}/audio/${track}`;
+}
+
 export function transcriptUrl(jobId: string): string {
   return `${API_BASE}/jobs/${jobId}/transcript`;
 }
@@ -145,10 +247,16 @@ export function subtitleUrl(jobId: string): string {
   return `${API_BASE}/jobs/${jobId}/subtitle`;
 }
 
-export function resultVideoUrl(jobId: string): string {
-  return `${API_BASE}/jobs/${jobId}/result`;
+export type VocalVersion = "on" | "off";
+
+export function resultVideoUrl(jobId: string, vocal: VocalVersion = "on"): string {
+  // The default version keeps its plain, stable address.
+  return `${API_BASE}/jobs/${jobId}/result${vocal === "off" ? "?vocal=off" : ""}`;
 }
 
-export function downloadVideoUrl(jobId: string): string {
-  return `${API_BASE}/jobs/${jobId}/download`;
+export function downloadVideoUrl(
+  jobId: string,
+  vocal: VocalVersion = "on",
+): string {
+  return `${API_BASE}/jobs/${jobId}/download${vocal === "off" ? "?vocal=off" : ""}`;
 }

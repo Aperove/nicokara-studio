@@ -2,44 +2,214 @@
 
 import {
   AlertCircle,
+  Clapperboard,
   CheckCircle2,
   Clock3,
   Download,
   FileVideo,
   Hash,
   LoaderCircle,
+  Palette,
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { ErrorFeedbackPanel } from "@/components/error-feedback";
+import { StylePanel } from "@/components/style-panel";
+import { TimelineReview } from "@/components/timeline-review";
 import {
   jobFailureFeedback,
   networkErrorFeedback,
   type ErrorFeedback,
 } from "@/lib/error-feedback";
 import { jobPresentation } from "@/lib/job-presentation";
-import { JOB_COPY } from "@/lib/ui-copy";
+import { JOB_COPY, REVIEW_COPY, STYLE_COPY, UPLOAD_COPY } from "@/lib/ui-copy";
 import {
   ApiRequestError,
   downloadVideoUrl,
   getJob,
+  getJobStyle,
   processedLyricsUrl,
+  restyleJob,
   resultVideoUrl,
   subtitleUrl,
   timelineUrl,
   transcriptUrl,
+  type VocalVersion,
 } from "@/services/api";
 import type { Job } from "@/types/job";
+import type { SubtitleStyle } from "@/types/style";
 
 function formatBytes(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
+}
+
+function ResultVideos({ job }: { job: Job }) {
+  const [version, setVersion] = useState<VocalVersion>("on");
+  const offAvailable = Boolean(job.off_vocal_available);
+  const shown: VocalVersion = offAvailable ? version : "on";
+
+  return (
+    <section className="mt-8" aria-labelledby="result-video-heading">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 id="result-video-heading" className="font-display text-xl font-bold">
+          {JOB_COPY.resultHeading}
+        </h2>
+        {offAvailable && (
+          <div className="flex gap-2 text-sm">
+            {(
+              [
+                ["on", UPLOAD_COPY.vocalOnLabel],
+                ["off", UPLOAD_COPY.vocalOffLabel],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={shown === value}
+                onClick={() => setVersion(value)}
+                className={`focus-ring rounded-lg border px-3 py-1.5 font-medium transition ${
+                  shown === value
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "bg-card text-muted-foreground hover:bg-muted"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <video
+        key={`${shown}-${job.updated_at}`}
+        className="mt-4 aspect-video w-full rounded-2xl bg-black"
+        controls
+        playsInline
+        preload="metadata"
+        src={resultVideoUrl(job.id, shown)}
+      >
+        {JOB_COPY.unsupportedVideo}
+      </video>
+      <div className="mt-4 flex flex-wrap gap-3">
+        <a
+          href={downloadVideoUrl(job.id, "on")}
+          className="focus-ring inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground"
+        >
+          <Download className="size-4" />
+          {offAvailable ? JOB_COPY.downloadOnVocal : JOB_COPY.downloadVideo}
+        </a>
+        {offAvailable && (
+          <a
+            href={downloadVideoUrl(job.id, "off")}
+            className="focus-ring inline-flex items-center gap-2 rounded-lg border bg-card px-5 py-3 text-sm font-semibold transition hover:bg-muted"
+          >
+            <Download className="size-4" />
+            {JOB_COPY.downloadOffVocal}
+          </a>
+        )}
+      </div>
+      {!offAvailable && job.vocal_mode === "both" && (
+        <p className="mt-3 text-xs text-muted-foreground">
+          {JOB_COPY.offVocalMissing}
+        </p>
+      )}
+    </section>
+  );
+}
+
+function RestylePanel({
+  jobId,
+  onQueued,
+}: {
+  jobId: string;
+  onQueued: () => void;
+}) {
+  const [style, setStyle] = useState<SubtitleStyle | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<ErrorFeedback | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    getJobStyle(jobId)
+      .then((value) => {
+        if (active) setStyle(value);
+      })
+      .catch((reason) => {
+        if (active) {
+          setError(
+            reason instanceof ApiRequestError
+              ? reason.feedback
+              : networkErrorFeedback("job"),
+          );
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [jobId]);
+
+  async function submit() {
+    if (!style) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await restyleJob(jobId, style);
+      onQueued();
+    } catch (reason) {
+      setError(
+        reason instanceof ApiRequestError
+          ? reason.feedback
+          : networkErrorFeedback("job"),
+      );
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <section
+      className="rounded-3xl border bg-card p-6 sm:p-9"
+      aria-labelledby="restyle-heading"
+    >
+      <h2
+        id="restyle-heading"
+        className="flex items-center gap-2 font-display text-xl font-bold"
+      >
+        <Palette className="size-5 text-primary" />
+        {STYLE_COPY.restyleHeading}
+      </h2>
+      <p className="mt-2 text-sm text-muted-foreground">
+        {STYLE_COPY.restyleDescription}
+      </p>
+      <div className="mt-5 space-y-4">
+        {error && <ErrorFeedbackPanel feedback={error} />}
+        {style && (
+          <>
+            <StylePanel
+              value={style}
+              onChange={setStyle}
+              disabled={submitting}
+            />
+            <button
+              type="button"
+              disabled={submitting}
+              onClick={submit}
+              className="focus-ring inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition hover:brightness-95 disabled:cursor-wait disabled:opacity-60"
+            >
+              <Palette className="size-4" />
+              {submitting ? STYLE_COPY.restyling : STYLE_COPY.restyleButton}
+            </button>
+          </>
+        )}
+      </div>
+    </section>
+  );
 }
 
 export function JobStatus({ jobId }: { jobId: string }) {
   const [job, setJob] = useState<Job | null>(null);
   const [requestError, setRequestError] = useState<ErrorFeedback | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [reviewOpen, setReviewOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -262,33 +432,49 @@ export function JobStatus({ jobId }: { jobId: string }) {
           </div>
         )}
 
-        {job.status === "COMPLETED" && (
-          <section className="mt-8" aria-labelledby="result-video-heading">
-            <h2
-              id="result-video-heading"
-              className="font-display text-xl font-bold"
-            >
-              {JOB_COPY.resultHeading}
-            </h2>
-            <video
-              className="mt-4 aspect-video w-full rounded-2xl bg-black"
-              controls
-              playsInline
-              preload="metadata"
-              src={resultVideoUrl(job.id)}
-            >
-              {JOB_COPY.unsupportedVideo}
-            </video>
-            <a
-              href={downloadVideoUrl(job.id)}
-              className="focus-ring mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground"
-            >
-              <Download className="size-4" />
-              {JOB_COPY.downloadVideo}
-            </a>
-          </section>
-        )}
+        {job.status === "COMPLETED" && <ResultVideos job={job} />}
       </div>
+
+      {job.status === "AWAITING_REVIEW" && (
+        <TimelineReview
+          jobId={job.id}
+          onRenderQueued={() => setRefreshKey((value) => value + 1)}
+        />
+      )}
+
+      {(job.status === "COMPLETED" ||
+        job.status === "SUBTITLE_GENERATED") && (
+        <>
+          <button
+            type="button"
+            aria-expanded={reviewOpen}
+            onClick={() => setReviewOpen((open) => !open)}
+            className="focus-ring inline-flex items-center gap-2 rounded-lg border bg-card px-4 py-2.5 text-sm font-semibold transition hover:bg-muted"
+          >
+            <Clapperboard className="size-4" />
+            {reviewOpen ? REVIEW_COPY.close : REVIEW_COPY.openFromCompleted}
+          </button>
+          {reviewOpen && (
+            <TimelineReview
+              key={`review-${job.updated_at}`}
+              jobId={job.id}
+              onRenderQueued={() => {
+                setReviewOpen(false);
+                setRefreshKey((value) => value + 1);
+              }}
+            />
+          )}
+        </>
+      )}
+
+      {(job.status === "COMPLETED" ||
+        job.status === "SUBTITLE_GENERATED") && (
+        <RestylePanel
+          key={job.updated_at}
+          jobId={job.id}
+          onQueued={() => setRefreshKey((value) => value + 1)}
+        />
+      )}
 
       <Link
         href="/"

@@ -1,0 +1,619 @@
+"use client";
+
+import {
+  AlertTriangle,
+  Clapperboard,
+  LoaderCircle,
+  Play,
+  RotateCcw,
+  Save,
+  Sparkles,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+import { ErrorFeedbackPanel } from "@/components/error-feedback";
+import { TimelineTrack } from "@/components/timeline-track";
+import {
+  networkErrorFeedback,
+  type ErrorFeedback,
+} from "@/lib/error-feedback";
+import {
+  activeLineIndex,
+  formatSeconds,
+  lineConcerns,
+  parseTime,
+  retimeLine,
+  tokenProgress,
+  typicalPace,
+} from "@/lib/timeline";
+import { REVIEW_COPY } from "@/lib/ui-copy";
+import {
+  ApiRequestError,
+  audioTrackUrl,
+  getReview,
+  refineTimelineLines,
+  renderJob,
+  saveTimeline,
+  sourceVideoUrl,
+} from "@/services/api";
+import type { Review, TimelineLine } from "@/types/timeline";
+
+type Draft = { start_ms: number; end_ms: number };
+type Busy = "save" | "refine" | "render" | null;
+
+const PREROLL_MS = 500;
+
+function feedbackOf(reason: unknown): ErrorFeedback {
+  return reason instanceof ApiRequestError
+    ? reason.feedback
+    : networkErrorFeedback("job");
+}
+
+function TimeInput({
+  valueMs,
+  label,
+  invalid,
+  onCommit,
+}: {
+  valueMs: number;
+  label: string;
+  invalid: boolean;
+  onCommit: (ms: number) => void;
+}) {
+  const [text, setText] = useState<string | null>(null);
+  const parsed = text === null ? valueMs : parseTime(text);
+  const bad = invalid || parsed === null;
+
+  function commit() {
+    if (text !== null && parsed !== null) onCommit(parsed);
+    setText(null);
+  }
+
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      value={text ?? formatSeconds(valueMs)}
+      aria-label={label}
+      aria-invalid={bad}
+      title={bad && parsed === null ? REVIEW_COPY.invalidTime : undefined}
+      onFocus={(event) => event.currentTarget.select()}
+      onChange={(event) => setText(event.target.value)}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") event.currentTarget.blur();
+        if (event.key === "Escape") setText(null);
+      }}
+      className={`focus-ring w-20 rounded border bg-card px-1.5 py-1 text-right font-mono ${
+        bad ? "border-destructive" : ""
+      }`}
+    />
+  );
+}
+
+function KaraokePreview({
+  line,
+  timeMs,
+}: {
+  line: TimelineLine | null;
+  timeMs: number;
+}) {
+  const visible =
+    line && timeMs >= line.start_ms - 3000 && timeMs <= line.end_ms + 400;
+  return (
+    <div
+      aria-hidden
+      className="flex min-h-16 items-center justify-center rounded-xl bg-slate-800 px-4 py-3 text-center text-2xl font-bold leading-tight sm:text-3xl"
+    >
+      {visible && line ? (
+        <span>
+          {line.tokens.map((token, index) => (
+            <span key={index} className="relative inline-block whitespace-pre">
+              <span className="text-white">{token.surface}</span>
+              <span
+                className="absolute inset-y-0 left-0 overflow-hidden text-[#FF6B6B]"
+                style={{ width: `${tokenProgress(token, timeMs) * 100}%` }}
+              >
+                {token.surface}
+              </span>
+            </span>
+          ))}
+        </span>
+      ) : (
+        <span className="text-base font-normal text-slate-400">
+          {REVIEW_COPY.previewIdle}
+        </span>
+      )}
+    </div>
+  );
+}
+
+export function TimelineReview({
+  jobId,
+  onRenderQueued,
+}: {
+  jobId: string;
+  onRenderQueued: () => void;
+}) {
+  const [review, setReview] = useState<Review | null>(null);
+  const [drafts, setDrafts] = useState<Record<number, Draft>>({});
+  const [track, setTrack] = useState<"video" | "vocals">("video");
+  const [timeMs, setTimeMs] = useState(0);
+  const [concernsOnly, setConcernsOnly] = useState(false);
+  const [busy, setBusy] = useState<Busy>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<ErrorFeedback | null>(null);
+  const mediaRef = useRef<HTMLMediaElement | null>(null);
+  const stopAtRef = useRef<number | null>(null);
+  const resumeAtRef = useRef(0);
+
+  useEffect(() => {
+    let active = true;
+    getReview(jobId)
+      .then((value) => {
+        if (active) setReview(value);
+      })
+      .catch((reason) => {
+        if (active) setError(feedbackOf(reason));
+      });
+    return () => {
+      active = false;
+    };
+  }, [jobId]);
+
+  // Follow the playhead every frame: karaoke fills need finer steps than
+  // the ~4 Hz `timeupdate` event provides.
+  useEffect(() => {
+    let frame = 0;
+    const tick = () => {
+      const media = mediaRef.current;
+      if (media) {
+        const now = media.currentTime * 1000;
+        if (stopAtRef.current !== null && now >= stopAtRef.current) {
+          stopAtRef.current = null;
+          media.pause();
+        }
+        setTimeMs((previous) =>
+          Math.abs(previous - now) >= 15 ? now : previous,
+        );
+      }
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  const lines = useMemo(() => {
+    if (!review) return [];
+    const moved = review.timeline.lines.map((line, index) => {
+      const draft = drafts[index];
+      return draft && draft.end_ms > draft.start_ms
+        ? retimeLine(line, draft.start_ms, draft.end_ms)
+        : line;
+    });
+    // A late ending gives way to the next line, exactly as it will be saved.
+    return moved.map((line, index) => {
+      const next = moved[index + 1];
+      return next && line.end_ms > next.start_ms && next.start_ms > line.start_ms
+        ? retimeLine(line, line.start_ms, next.start_ms)
+        : line;
+    });
+  }, [review, drafts]);
+
+  const dirtyIndexes = useMemo(
+    () => Object.keys(drafts).map(Number).sort((a, b) => a - b),
+    [drafts],
+  );
+  const invalidIndexes = dirtyIndexes.filter(
+    (index) => drafts[index].end_ms <= drafts[index].start_ms,
+  );
+  const pace = useMemo(() => typicalPace(lines), [lines]);
+  const movedLines = review?.moved_lines ?? [];
+  const stuckLines = review?.unresolved_lines ?? [];
+  const concernCount = useMemo(
+    () =>
+      lines.filter(
+        (line, index) =>
+          lineConcerns(line, pace).length > 0 ||
+          (review?.moved_lines ?? []).includes(index) ||
+          (review?.unresolved_lines ?? []).includes(index),
+      ).length,
+    [lines, pace, review],
+  );
+  const current = lines.length ? activeLineIndex(lines, timeMs) : -1;
+
+  const setDraft = useCallback(
+    (index: number, patch: Partial<Draft>) => {
+      if (!review) return;
+      setNotice(null);
+      setDrafts((previous) => {
+        const base = previous[index] ?? {
+          start_ms: review.timeline.lines[index].start_ms,
+          end_ms: review.timeline.lines[index].end_ms,
+        };
+        const next = { ...base, ...patch };
+        const original = review.timeline.lines[index];
+        const copy = { ...previous };
+        if (
+          next.start_ms === original.start_ms &&
+          next.end_ms === original.end_ms
+        ) {
+          delete copy[index];
+        } else {
+          copy[index] = next;
+        }
+        return copy;
+      });
+    },
+    [review],
+  );
+
+  function playLine(index: number) {
+    const media = mediaRef.current;
+    if (!media) return;
+    const line = lines[index];
+    media.currentTime = Math.max(0, line.start_ms - PREROLL_MS) / 1000;
+    stopAtRef.current = line.end_ms + 300;
+    void media.play();
+  }
+
+  function switchTrack(next: "video" | "vocals") {
+    if (next === track) return;
+    resumeAtRef.current = mediaRef.current?.currentTime ?? 0;
+    stopAtRef.current = null;
+    setTrack(next);
+  }
+
+  async function persist(): Promise<boolean> {
+    if (!dirtyIndexes.length) return true;
+    const result = await saveTimeline(
+      jobId,
+      dirtyIndexes.map((index) => ({ index, ...drafts[index] })),
+    );
+    setReview((previous) =>
+      previous ? { ...previous, timeline: result.timeline } : previous,
+    );
+    setDrafts({});
+    return true;
+  }
+
+  async function run(kind: Exclude<Busy, null>) {
+    if (invalidIndexes.length) return;
+    setBusy(kind);
+    setError(null);
+    setNotice(null);
+    try {
+      const targets = dirtyIndexes;
+      await persist();
+      if (kind === "refine" && targets.length) {
+        const result = await refineTimelineLines(jobId, targets);
+        setReview((previous) =>
+          previous ? { ...previous, timeline: result.timeline } : previous,
+        );
+        setNotice(
+          REVIEW_COPY.refinedResult(result.refined_lines.length, targets.length),
+        );
+      }
+      if (kind === "render") {
+        await renderJob(jobId);
+        onRenderQueued();
+        return;
+      }
+    } catch (reason) {
+      setError(feedbackOf(reason));
+    }
+    setBusy(null);
+  }
+
+  if (!review) {
+    return (
+      <section className="rounded-3xl border bg-card p-6 sm:p-9">
+        {error ? (
+          <ErrorFeedbackPanel feedback={error} />
+        ) : (
+          <p className="flex items-center gap-3 text-sm text-muted-foreground">
+            <LoaderCircle className="size-4 animate-spin" />
+            {REVIEW_COPY.loading}
+          </p>
+        )}
+      </section>
+    );
+  }
+
+  const mediaProps = {
+    controls: true,
+    preload: "metadata" as const,
+    onLoadedMetadata: (event: React.SyntheticEvent<HTMLMediaElement>) => {
+      event.currentTarget.currentTime = resumeAtRef.current;
+    },
+  };
+
+  return (
+    <section
+      className="rounded-3xl border bg-card p-6 sm:p-9"
+      aria-labelledby="review-panel-heading"
+    >
+      <h2
+        id="review-panel-heading"
+        className="flex items-center gap-2 font-display text-xl font-bold"
+      >
+        <Clapperboard className="size-5 text-primary" />
+        {REVIEW_COPY.heading}
+      </h2>
+      <p className="mt-2 text-sm text-muted-foreground">
+        {REVIEW_COPY.description}
+      </p>
+
+      <div className="sticky top-0 z-10 -mx-2 mt-5 space-y-3 bg-card px-2 pb-3 pt-1">
+        <div className="flex gap-2 text-sm">
+          {(
+            [
+              ["video", REVIEW_COPY.sourceVideo],
+              ["vocals", REVIEW_COPY.vocalsOnly],
+            ] as const
+          ).map(([value, label]) =>
+            value === "vocals" && !review.has_vocals ? null : (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={track === value}
+                onClick={() => switchTrack(value)}
+                className={`focus-ring rounded-lg border px-3 py-1.5 font-medium transition ${
+                  track === value
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "bg-card text-muted-foreground hover:bg-muted"
+                }`}
+              >
+                {label}
+              </button>
+            ),
+          )}
+          <span className="ml-auto self-center font-mono text-xs text-muted-foreground">
+            {formatSeconds(timeMs)}
+          </span>
+        </div>
+        {track === "video" ? (
+          <video
+            key="video"
+            ref={(element) => {
+              mediaRef.current = element;
+            }}
+            className="max-h-56 w-full rounded-xl bg-black"
+            playsInline
+            src={sourceVideoUrl(jobId)}
+            {...mediaProps}
+          />
+        ) : (
+          <audio
+            key="vocals"
+            ref={(element) => {
+              mediaRef.current = element;
+            }}
+            className="w-full"
+            src={audioTrackUrl(jobId, "vocals")}
+            {...mediaProps}
+          />
+        )}
+        <KaraokePreview
+          line={current >= 0 ? lines[current] : null}
+          timeMs={timeMs}
+        />
+        <TimelineTrack
+          lines={lines}
+          rests={review.rests}
+          editedIndexes={dirtyIndexes}
+          currentIndex={current}
+          timeMs={timeMs}
+          durationMs={
+            review.duration_ms ??
+            (lines.length ? lines[lines.length - 1].end_ms + 5_000 : 0)
+          }
+          audioUrl={audioTrackUrl(jobId, review.has_vocals ? "vocals" : "mix")}
+          onSeek={(ms) => {
+            stopAtRef.current = null;
+            if (mediaRef.current) mediaRef.current.currentTime = ms / 1000;
+          }}
+          onChange={(index, start_ms, end_ms) =>
+            setDraft(index, { start_ms, end_ms })
+          }
+        />
+      </div>
+
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-3 text-sm">
+        <span
+          className={`inline-flex items-center gap-1.5 ${
+            concernCount ? "text-amber-600" : "text-muted-foreground"
+          }`}
+        >
+          {concernCount > 0 && <AlertTriangle className="size-4" />}
+          {REVIEW_COPY.concernSummary(concernCount)}
+        </span>
+        <label className="flex items-center gap-2 text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={concernsOnly}
+            onChange={(event) => setConcernsOnly(event.target.checked)}
+          />
+          {REVIEW_COPY.showConcernsOnly}
+        </label>
+      </div>
+
+      <ol className="mt-3 space-y-1.5">
+        {lines.map((line, index) => {
+          const concerns = lineConcerns(line, pace);
+          const draft = drafts[index];
+          const wasMoved = movedLines.includes(index);
+          const isStuck = stuckLines.includes(index);
+          if (concernsOnly && !concerns.length && !draft && !wasMoved && !isStuck)
+            return null;
+          const invalid = invalidIndexes.includes(index);
+          const startMs = draft?.start_ms ?? line.start_ms;
+          const endMs = draft?.end_ms ?? line.end_ms;
+          return (
+            <li
+              key={index}
+              className={`rounded-xl border px-3 py-2 transition ${
+                index === current
+                  ? "border-primary bg-primary/5"
+                  : "bg-card"
+              }`}
+            >
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                <button
+                  type="button"
+                  onClick={() => playLine(index)}
+                  title={REVIEW_COPY.playLine}
+                  aria-label={`${REVIEW_COPY.playLine} ${index + 1}`}
+                  className="focus-ring flex size-8 shrink-0 items-center justify-center rounded-full border bg-card transition hover:bg-muted"
+                >
+                  <Play className="size-3.5" />
+                </button>
+                <span className="w-6 shrink-0 text-right font-mono text-xs text-muted-foreground">
+                  {index + 1}
+                </span>
+                <span className="min-w-40 flex-1 text-sm">{line.surface}</span>
+                {concerns.includes("short") && (
+                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
+                    {REVIEW_COPY.concernShort}
+                  </span>
+                )}
+                {concerns.includes("low_confidence") && (
+                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
+                    {REVIEW_COPY.concernLowConfidence}
+                  </span>
+                )}
+                {concerns.includes("odd_pace") && (
+                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
+                    {REVIEW_COPY.concernOddPace}
+                  </span>
+                )}
+                {isStuck && (
+                  <span className="rounded bg-red-100 px-1.5 py-0.5 text-xs text-red-800">
+                    {REVIEW_COPY.stuckInRest}
+                  </span>
+                )}
+                {wasMoved && (
+                  <span className="rounded bg-sky-100 px-1.5 py-0.5 text-xs text-sky-800">
+                    {REVIEW_COPY.movedOutOfRest}
+                  </span>
+                )}
+                {draft && (
+                  <span className="rounded bg-primary/10 px-1.5 py-0.5 text-xs text-primary">
+                    {REVIEW_COPY.edited}
+                  </span>
+                )}
+                <div className="flex items-center gap-1.5 text-xs">
+                  {(
+                    [
+                      ["start_ms", REVIEW_COPY.lineStart, startMs, REVIEW_COPY.setStart],
+                      ["end_ms", REVIEW_COPY.lineEnd, endMs, REVIEW_COPY.setEnd],
+                    ] as const
+                  ).map(([field, label, value, hint]) => (
+                    <span key={field} className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        title={hint}
+                        aria-label={`${hint} ${index + 1}`}
+                        onClick={() =>
+                          setDraft(index, {
+                            [field]: Math.round(
+                              (mediaRef.current?.currentTime ?? 0) * 1000,
+                            ),
+                          })
+                        }
+                        className="focus-ring rounded border bg-card px-1.5 py-1 font-medium transition hover:bg-muted"
+                      >
+                        {label}
+                      </button>
+                      <TimeInput
+                        valueMs={value}
+                        label={`${label} ${index + 1}`}
+                        invalid={invalid}
+                        onCommit={(ms) => setDraft(index, { [field]: ms })}
+                      />
+                    </span>
+                  ))}
+                  {draft && (
+                    <button
+                      type="button"
+                      title={REVIEW_COPY.resetLine}
+                      aria-label={`${REVIEW_COPY.resetLine} ${index + 1}`}
+                      onClick={() =>
+                        setDrafts((previous) => {
+                          const copy = { ...previous };
+                          delete copy[index];
+                          return copy;
+                        })
+                      }
+                      className="focus-ring rounded p-1 text-muted-foreground transition hover:bg-muted"
+                    >
+                      <RotateCcw className="size-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+              {invalid && (
+                <p className="mt-1 text-xs text-destructive">
+                  {REVIEW_COPY.invalidRange}
+                </p>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+
+      <div className="mt-5 space-y-3">
+        {error && <ErrorFeedbackPanel feedback={error} />}
+        {notice && (
+          <p className="rounded-lg bg-primary/10 px-3 py-2 text-sm text-primary">
+            {notice}
+          </p>
+        )}
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            disabled={busy !== null || !dirtyIndexes.length || invalidIndexes.length > 0}
+            onClick={() => run("save")}
+            className="focus-ring inline-flex items-center gap-2 rounded-lg border bg-card px-4 py-2.5 text-sm font-semibold transition hover:bg-muted disabled:opacity-50"
+          >
+            <Save className="size-4" />
+            {busy === "save" ? REVIEW_COPY.saving : REVIEW_COPY.save}
+          </button>
+          {review.can_refine && (
+            <button
+              type="button"
+              disabled={busy !== null || !dirtyIndexes.length || invalidIndexes.length > 0}
+              onClick={() => run("refine")}
+              title={REVIEW_COPY.refineHint}
+              className="focus-ring inline-flex items-center gap-2 rounded-lg border bg-card px-4 py-2.5 text-sm font-semibold transition hover:bg-muted disabled:opacity-50"
+            >
+              {busy === "refine" ? (
+                <LoaderCircle className="size-4 animate-spin" />
+              ) : (
+                <Sparkles className="size-4" />
+              )}
+              {busy === "refine" ? REVIEW_COPY.refining : REVIEW_COPY.refine}
+            </button>
+          )}
+          <button
+            type="button"
+            disabled={busy !== null || invalidIndexes.length > 0}
+            onClick={() => run("render")}
+            className="focus-ring inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition hover:brightness-95 disabled:cursor-wait disabled:opacity-60"
+          >
+            <Clapperboard className="size-4" />
+            {busy === "render" ? REVIEW_COPY.rendering : REVIEW_COPY.render}
+          </button>
+          {dirtyIndexes.length > 0 && (
+            <span className="text-xs text-muted-foreground">
+              {REVIEW_COPY.unsavedCount(dirtyIndexes.length)}
+            </span>
+          )}
+        </div>
+        {review.can_refine && (
+          <p className="text-xs text-muted-foreground">{REVIEW_COPY.refineHint}</p>
+        )}
+      </div>
+    </section>
+  );
+}

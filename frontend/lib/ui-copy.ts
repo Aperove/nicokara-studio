@@ -37,6 +37,10 @@ export const UPLOAD_COPY = {
   vocalOffLabel: "OFF VOCAL",
   offVocalHint:
     "本机将使用 MDX 模型分离人声并生成伴奏音轨，处理时间会相应增加。",
+  reviewSectionTitle: "合成前核对",
+  reviewLabel: "合成视频前先核对时间轴",
+  reviewHint:
+    "自动对齐难免有几句不准。勾选后会先停在核对界面，可以边听边修正，确认后再合成视频。",
   uploadProgressTitle: "正在导入素材到本机",
   uploadProgressDescription: "导入完成后会自动进入任务状态页。",
   uploadingButton: "正在导入…",
@@ -61,5 +65,122 @@ export const JOB_COPY = {
   downloadSubtitle: "下载字幕文件",
   unsupportedVideo: "当前浏览器无法播放该视频，请直接下载后查看。",
   downloadVideo: "下载生成的视频",
+  downloadOnVocal: "下载 ON VOCAL 版",
+  downloadOffVocal: "下载 OFF VOCAL 版",
+  offVocalMissing: "这个任务没有生成 OFF VOCAL 版（伴奏分离失败，或任务创建于此功能之前）。",
   createAnother: "创建新任务",
+} as const;
+
+export const STYLE_COPY = {
+  sectionTitle: "字幕样式",
+  expand: "自定义样式",
+  collapse: "收起",
+  defaultSummary: "默认：珊瑚色高亮、白字深色描边、左右交错排布",
+  colorPresets: "配色方案",
+  previewHint: "预览仅供参考，最终效果以生成的视频为准。",
+  sungColor: "已唱颜色",
+  unsungColor: "未唱颜色",
+  outlineColor: "描边颜色",
+  font: "字体",
+  fontHint:
+    "需要是处理视频的那台机器上已安装的字体，找不到时会自动换成其他日文字体。标有 Docker 的字体在 Docker 部署中可用，其余为 Windows 自带字体。",
+  customFont: "其他字体",
+  customFontPlaceholder: "输入已安装的字体名称",
+  fontSize: "字号",
+  fontSizeHint: "歌词行过长时会自动缩小，以免超出画面。",
+  layout: "排布方式",
+  layoutStaggered: "左右交错",
+  layoutCentered: "居中",
+  verticalPosition: "垂直位置",
+  positionTop: "顶部",
+  positionMiddle: "中部",
+  positionBottom: "底部",
+  showRuby: "显示假名注音",
+  glow: "高亮发光效果",
+  leadIn: "提前显示",
+  reset: "恢复默认样式",
+  restyleHeading: "修改字幕样式",
+  restyleDescription:
+    "只重新生成字幕和视频，不会重新识别歌声，通常一两分钟即可完成。",
+  restyleButton: "用新样式重新生成",
+  restyling: "正在提交…",
+} as const;
+
+export const REVIEW_COPY = {
+  heading: "核对时间轴",
+  description:
+    "播放原视频，对照实时变色预览检查每一句。发现不准的句子，可以在波形时间轴上直接拖动，也可以改起止时间或边听边打点。",
+  openFromCompleted: "核对并修正时间轴",
+  close: "收起核对界面",
+  loading: "正在读取时间轴…",
+  sourceVideo: "原视频",
+  vocalsOnly: "仅人声",
+  previewIdle: "（间奏）",
+  lineStart: "起",
+  lineEnd: "止",
+  playLine: "播放此句",
+  setStart: "把起点设为当前播放位置",
+  setEnd: "把终点设为当前播放位置",
+  resetLine: "撤销此句的修改",
+  concernShort: "过短",
+  concernLowConfidence: "匹配度低",
+  concernOddPace: "语速异常",
+  movedOutOfRest: "AI 从间奏里挪出",
+  stuckInRest: "落在间奏里",
+  restLabel: "间奏",
+  edited: "已修改",
+  concernSummary: (count: number) =>
+    count ? `有 ${count} 句建议重点核对` : "没有发现明显可疑的句子",
+  showConcernsOnly: "只看可疑的句子",
+  unsavedCount: (count: number) => `${count} 句未保存`,
+  save: "保存修改",
+  saving: "正在保存…",
+  refine: "用 AI 重新对齐已修改的句子",
+  refining: "AI 对齐中，约需一分钟…",
+  refineHint:
+    "只需把句子的起止范围大致标对，AI 会在这个范围里重新精确到每个词。",
+  refinedResult: (done: number, total: number) =>
+    done === total
+      ? `已重新对齐 ${done} 句，请再听一遍确认`
+      : `已重新对齐 ${done} / ${total} 句，其余保持手动时间`,
+  render: "确认并合成视频",
+  rendering: "正在提交…",
+  invalidRange: "终点必须晚于起点",
+  invalidTime: "时间格式应为 分:秒，例如 1:29.08",
+  trackLine: "时间轴上的句子",
+  trackHint:
+    "拖动色块可以整体移动一句，拖动两端的白边可以单独调整起点或终点；点击空白处跳转播放位置。",
+  trackScroll: "滚动时间轴",
+  followPlayhead: "跟随播放",
+  zoomIn: "放大时间轴",
+  zoomOut: "缩小时间轴",
+} as const;
+
+export const CREATE_COPY = {
+  heading: "新建任务",
+  sourceTitle: "视频素材",
+  sourceFile: "本地文件",
+  sourceLink: "视频链接",
+  linkLabel: "视频链接",
+  linkPlaceholder: "粘贴 YouTube 视频链接",
+  linkHelp:
+    "目前支持 YouTube 链接。视频会由本机下载到任务目录，下载完成后自动开始处理。",
+  linkRights: "请只下载你有权使用的视频。",
+  lyricsPlaceholder: "在这里粘贴日语歌词，每句单独一行",
+  optionsTitle: "选项",
+  bothVersions:
+    "会同时生成 ON VOCAL（原唱）和 OFF VOCAL（伴奏）两个版本，画面只渲染一次。",
+  invalidLink: "请填写以 http:// 或 https:// 开头的视频链接",
+  linkRequired: "请填写视频链接，或切换到“本地文件”选择视频",
+} as const;
+
+export const JOBS_COPY = {
+  heading: "最近任务",
+  empty: "还没有任务。创建第一个任务后会出现在这里。",
+  loadFailed: "无法读取任务列表，请确认本地后端正在运行。",
+  refresh: "刷新",
+  justNow: "刚刚",
+  minutesAgo: (minutes: number) => `${minutes} 分钟前`,
+  hoursAgo: (hours: number) => `${hours} 小时前`,
+  daysAgo: (days: number) => `${days} 天前`,
 } as const;

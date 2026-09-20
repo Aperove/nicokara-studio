@@ -23,6 +23,17 @@ export function jobPresentation(
       tone: "success",
     };
   }
+  if (status === "AWAITING_REVIEW") {
+    return {
+      eyebrow: "等待核对",
+      title: "时间轴已生成，等待核对",
+      description:
+        "歌词已经完成自动对齐。请在下方核对并修正时间轴，确认后再合成视频。",
+      progressLabel: "等待核对",
+      terminal: true,
+      tone: "pending",
+    };
+  }
   if (status === "SUBTITLE_GENERATED") {
     return {
       eyebrow: "字幕已生成",
@@ -67,7 +78,9 @@ export function jobPresentation(
     return {
       eyebrow: "处理失败",
       title:
-        stage === "REMOVING_VOCALS"
+        stage === "DOWNLOADING_VIDEO"
+          ? "视频下载失败"
+          : stage === "REMOVING_VOCALS"
           ? "人声分离失败"
           : stage === "EXTRACTING_AUDIO"
           ? "音频提取失败"
@@ -84,6 +97,16 @@ export function jobPresentation(
       progressLabel: "任务失败",
       terminal: true,
       tone: "error",
+    };
+  }
+  if (stage === "DOWNLOADING_VIDEO") {
+    return {
+      eyebrow: "获取素材",
+      title: "正在下载视频",
+      description: "本机正在从视频链接下载素材，下载完成后会自动开始处理。",
+      progressLabel: "下载视频",
+      terminal: false,
+      tone: "active",
     };
   }
   if (stage === "REMOVING_VOCALS") {

@@ -285,6 +285,16 @@ type JobFailureDefinition = Omit<
 >;
 
 const JOB_FAILURES: Record<string, JobFailureDefinition> = {
+  VIDEO_DOWNLOAD_FAILED: {
+    title: "视频下载失败",
+    description: "本地程序无法从这个链接下载视频，任务没有开始处理。",
+    solutions: [
+      "在浏览器里确认这个链接可以正常播放，且不是需要登录、会员或有地区限制的视频。",
+      "视频站点经常改版：在后端环境里运行 python -m pip install -U yt-dlp 升级下载组件后重试。",
+      "如果本机需要代理才能访问该站点，请确认启动后端的终端已经配置好代理。",
+      "也可以先自己下载成 MP4，再用“本地文件”方式创建任务。",
+    ],
+  },
   VOCAL_REMOVAL_FAILED: {
     title: "人声分离失败",
     description: "本地程序无法使用 MDX 模型生成伴奏音轨，当前任务不能继续渲染。",
