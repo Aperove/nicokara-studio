@@ -8,7 +8,7 @@ from typing import Literal
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field, ValidationError
 
 from app.ai.whisper import TranscriptDocument
@@ -626,6 +626,37 @@ def refine_timeline_lines(
         "timeline": write_timeline(job_dir, timeline),
         "refined_lines": sorted(refined_lines),
     }
+
+
+class PreviewRequest(BaseModel):
+    style: SubtitleStyle
+    time_ms: int | None = Field(default=None, ge=0)
+
+
+@router.post("/{job_id}/preview")
+def preview_frame(request: Request, job_id: str, body: PreviewRequest) -> Response:
+    """One frame drawn by the real renderer, to judge size and position."""
+    _, job_dir = reviewable_job(request, job_id)
+    pipeline = job_pipeline(request)
+    if pipeline is None or not (job_dir / "input.mp4").is_file():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="本机无法生成画面预览",
+        )
+    try:
+        image, time_ms = pipeline.preview_frame(
+            job_dir, body.style, time_ms=body.time_ms
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="画面预览生成失败，请查看本地服务日志",
+        ) from exc
+    return Response(
+        content=image,
+        media_type="image/jpeg",
+        headers={"X-Preview-Time-Ms": str(time_ms), "Cache-Control": "no-store"},
+    )
 
 
 @router.post("/{job_id}/render", response_model=JobResponse)

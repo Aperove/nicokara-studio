@@ -230,6 +230,7 @@ def create_app(
         allow_origins=resolved_settings.cors_origins,
         allow_credentials=False,
         allow_methods=["GET", "POST", "PUT"],
+        expose_headers=["X-Preview-Time-Ms"],
         allow_headers=["Content-Type"],
     )
 

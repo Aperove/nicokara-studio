@@ -70,6 +70,13 @@ export const JOB_COPY = {
 } as const;
 
 export const STYLE_COPY = {
+  framePreviewCaption: "真实画面：和最终视频用同一个渲染器画的",
+  framePreviewFailed: "画面预览生成失败",
+  framePreviewAlt: "带字幕的视频画面预览",
+  framePreviewLongest: "最长的一句",
+  framePreviewCurrent: "当前播放位置",
+  framePreviewHint:
+    "字号、位置和自动缩小都以这张图为准。“最长的一句”决定整首歌缩到多小。",
   sectionTitle: "字幕样式",
   expand: "自定义样式",
   collapse: "收起",

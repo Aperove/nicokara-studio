@@ -15,6 +15,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { ErrorFeedbackPanel } from "@/components/error-feedback";
+import { FramePreview } from "@/components/frame-preview";
 import { StylePanel } from "@/components/style-panel";
 import { TimelineReview } from "@/components/timeline-review";
 import {
@@ -187,10 +188,15 @@ function RestylePanel({
         {error && <ErrorFeedbackPanel feedback={error} />}
         {style && (
           <>
+            <FramePreview jobId={jobId} style={style} timeMs={null} />
+            <p className="text-xs text-muted-foreground">
+              {STYLE_COPY.framePreviewHint}
+            </p>
             <StylePanel
               value={style}
               onChange={setStyle}
               disabled={submitting}
+              showPreview={false}
             />
             <button
               type="button"

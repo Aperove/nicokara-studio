@@ -256,6 +256,36 @@ export function retryForcedAlignment(
   });
 }
 
+/** A frame drawn by the real renderer; the caller revokes the object URL. */
+export async function previewFrame(
+  jobId: string,
+  style: SubtitleStyle,
+  timeMs: number | null,
+  signal?: AbortSignal,
+): Promise<{ url: string; timeMs: number }> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}/jobs/${jobId}/preview`, {
+      method: "POST",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ style, time_ms: timeMs }),
+      signal,
+    });
+  } catch {
+    throw connectionError("job");
+  }
+  if (!response.ok) {
+    throw new ApiRequestError(
+      httpErrorFeedback("job", response.status, await fetchResponseDetail(response)),
+    );
+  }
+  return {
+    url: URL.createObjectURL(await response.blob()),
+    timeMs: Number(response.headers.get("X-Preview-Time-Ms") ?? timeMs ?? 0),
+  };
+}
+
 export function renderJob(jobId: string, style?: SubtitleStyle): Promise<Job> {
   return jsonRequest<Job>(`/jobs/${jobId}/render`, {
     method: "POST",

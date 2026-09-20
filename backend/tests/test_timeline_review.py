@@ -395,3 +395,62 @@ def test_the_style_chosen_while_reviewing_is_stored_with_the_render_request(
         assert len(runner.enqueued) == queued_before + 1
         stored = json.loads((job_dir / "style.json").read_text("utf-8"))
         assert (stored["sung_color"], stored["glow"]) == ("#38BDF8", False)
+
+
+class FrameRenderer:
+    """Stands in for FFmpeg: records what it was asked to draw."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, float]] = []
+
+    def render_frame(self, video, subtitle, output, *, time_seconds, **_):
+        self.calls.append((subtitle.read_text("utf-8-sig"), time_seconds))
+        output.write_bytes(b"\xff\xd8jpeg")
+
+
+def test_a_preview_frame_is_drawn_in_the_given_style_without_storing_it(
+    tmp_path: Path,
+) -> None:
+    from app.core.database import Database
+    from app.subtitle.ass_generator import AssGenerator
+    from app.tasks.pipeline import TranscriptionPipeline
+
+    renderer = FrameRenderer()
+    database = Database(tmp_path / "unused.sqlite3")
+    pipeline = TranscriptionPipeline(
+        database=database,
+        extractor=None,
+        transcriber=None,
+        aligner=LyricTimelineAligner(),
+        subtitle_generator=AssGenerator(),
+        video_renderer=renderer,
+    )
+    with review_client(tmp_path, RecordingRunner(pipeline)) as client:
+        job_id, job_dir = prepare_review_job(client, tmp_path)
+        base = f"/api/v1/jobs/{job_id}"
+        style = client.get(f"{base}/style").json()
+
+        longest = client.post(
+            f"{base}/preview",
+            json={"style": {**style, "font_size": 60, "sung_color": "#38BDF8"}},
+        )
+        at_time = client.post(
+            f"{base}/preview", json={"style": style, "time_ms": 12_345}
+        )
+        invalid = client.post(
+            f"{base}/preview", json={"style": {**style, "font_size": 9_999}}
+        )
+
+    assert longest.status_code == 200
+    assert longest.headers["content-type"] == "image/jpeg"
+    assert longest.content == b"\xff\xd8jpeg"
+    assert at_time.headers["x-preview-time-ms"] == "12345"
+    assert invalid.status_code == 422
+    subtitles, _ = renderer.calls[0]
+    assert ",60," in subtitles and "&H00F8BD38" in subtitles
+    assert renderer.calls[1][1] == 12.345
+    # nothing is left behind and the stored style is untouched
+    assert not list(job_dir.glob("preview_*"))
+    assert not (job_dir / "style.json").exists() or json.loads(
+        (job_dir / "style.json").read_text("utf-8")
+    ) == style

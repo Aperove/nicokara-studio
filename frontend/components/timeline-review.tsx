@@ -24,6 +24,7 @@ import {
 import { createPortal } from "react-dom";
 
 import { ErrorFeedbackPanel } from "@/components/error-feedback";
+import { FramePreview } from "@/components/frame-preview";
 import { TimelineTrack } from "@/components/timeline-track";
 import {
   networkErrorFeedback,
@@ -41,7 +42,7 @@ import {
   typicalPace,
 } from "@/lib/timeline";
 import { BELOW_HEADER, PAGE_WIDTH } from "@/lib/layout";
-import { REVIEW_COPY } from "@/lib/ui-copy";
+import { REVIEW_COPY, STYLE_COPY } from "@/lib/ui-copy";
 import { StylePanel, outlineShadow } from "@/components/style-panel";
 import {
   ApiRequestError,
@@ -255,6 +256,8 @@ export function TimelineReview({
   const [style, setStyle] = useState<SubtitleStyle>(DEFAULT_SUBTITLE_STYLE);
   const [styleDirty, setStyleDirty] = useState(false);
   const [styleOpen, setStyleOpen] = useState(false);
+  // which frame the real-render preview shows while the style is edited
+  const [frameMode, setFrameMode] = useState<"longest" | "current">("longest");
   const canExpand = useSyncExternalStore(
     subscribeToWorkbenchQuery,
     () => window.matchMedia(WORKBENCH_QUERY).matches,
@@ -645,6 +648,47 @@ export function TimelineReview({
       timeMs={timeMs}
       style={style}
     />
+  );
+
+  // Half-second steps: the preview is re-rendered when the playhead rests,
+  // not for every frame that passes while the song plays.
+  const frameTimeMs =
+    frameMode === "current" ? Math.round(timeMs / 500) * 500 : null;
+
+  const framePreview = (
+    <>
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        {(
+          [
+            ["longest", STYLE_COPY.framePreviewLongest],
+            ["current", STYLE_COPY.framePreviewCurrent],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            aria-pressed={frameMode === value}
+            onClick={() => setFrameMode(value)}
+            className={`focus-ring rounded-lg border px-3 py-1.5 font-medium transition ${
+              frameMode === value
+                ? "border-primary bg-primary/10 text-primary"
+                : "bg-card text-muted-foreground hover:bg-muted"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+        <span className="min-w-0 flex-1 text-xs text-muted-foreground">
+          {STYLE_COPY.framePreviewHint}
+        </span>
+      </div>
+      <FramePreview
+        jobId={jobId}
+        style={style}
+        timeMs={frameTimeMs}
+        className={wide ? "min-h-0 flex-1" : ""}
+      />
+    </>
   );
 
   const styleEditor = (
@@ -1105,8 +1149,10 @@ export function TimelineReview({
           className={`${PAGE_WIDTH} relative grid min-h-0 flex-1 grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] gap-6 py-4`}
         >
           <div className="flex min-h-0 flex-col gap-3">
-            {trackSwitch}
-            {media}
+            {/* While the style is edited the real frame takes the player's
+                place; the player stays mounted so playback is not lost. */}
+            {styleOpen ? framePreview : trackSwitch}
+            <div className={styleOpen ? "hidden" : "contents"}>{media}</div>
             {preview}
             {waveform}
           </div>
@@ -1173,7 +1219,12 @@ export function TimelineReview({
               {styleOpen ? REVIEW_COPY.styleClose : REVIEW_COPY.styleOpen}
             </button>
           </div>
-          {styleOpen && <div className="mt-3">{styleEditor}</div>}
+          {styleOpen && (
+            <div className="mt-3 space-y-3">
+              {framePreview}
+              {styleEditor}
+            </div>
+          )}
         </div>
         {waveform}
       </div>

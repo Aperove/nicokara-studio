@@ -339,6 +339,54 @@ class TranscriptionPipeline:
             return False
         return bool(options.get("review_before_render"))
 
+    def preview_frame(
+        self,
+        job_dir: Path,
+        style: Any,
+        *,
+        time_ms: int | None,
+    ) -> tuple[bytes, int]:
+        """A frame of the video with the subtitles in the given style.
+
+        Without a time the longest line is shown: it decides how far the
+        font is shrunk, so it is the one worth looking at.
+        """
+        import uuid
+
+        if self.video_renderer is None or not hasattr(
+            self.video_renderer, "render_frame"
+        ):
+            raise RuntimeError("This installation cannot render previews")
+        base_config = getattr(self.subtitle_generator, "config", None)
+        if base_config is None:
+            raise RuntimeError("This installation cannot render previews")
+        timeline = LyricTimeline.from_dict(
+            json.loads((job_dir / "timeline.json").read_text(encoding="utf-8"))
+        )
+        if time_ms is None:
+            longest = max(timeline.lines, key=lambda line: len(line.surface))
+            time_ms = (longest.start_ms + longest.end_ms) // 2
+        token = uuid.uuid4().hex
+        ass_path = job_dir / f"preview_{token}.ass"
+        image_path = job_dir / f"preview_{token}.jpg"
+        try:
+            ass_path.write_text(
+                self.subtitle_generator.__class__(
+                    config=style.apply_to(base_config)
+                ).generate(timeline),
+                encoding="utf-8-sig",
+            )
+            self.video_renderer.render_frame(
+                job_dir / "input.mp4",
+                ass_path,
+                image_path,
+                time_seconds=time_ms / 1000,
+            )
+            return image_path.read_bytes(), time_ms
+        finally:
+            ass_path.unlink(missing_ok=True)
+            image_path.unlink(missing_ok=True)
+
     def _generate_subtitles(self, job_dir: Path, timeline: Any) -> str:
         """Render the ASS text, honouring the job's style.json if any."""
         style_path = job_dir / "style.json"
