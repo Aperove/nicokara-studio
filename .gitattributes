@@ -1,0 +1,2 @@
+# Shell scripts are uploaded to Linux servers as they are; CRLF breaks them.
+*.sh text eol=lf
